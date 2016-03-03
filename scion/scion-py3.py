@@ -444,7 +444,7 @@ def scion_graft_git_update(entry_key,sources_list_file_path,rootstock_path,shelf
         git_command="git pull"
         # execute git command
         try:
-        	retcode = subprocess.check_call(git_command, cwd = local_scion_depot_path)
+        	retcode = subprocess.check_call(git_command, shell=True, cwd = local_scion_depot_path)
         	if retcode < 0:
         		print("error: ", git_command," : ", -retcode, file=sys.stderr)
         	else:
@@ -747,7 +747,7 @@ def scion_seed_git_clone(rootstock_path, seed_url, seed_version, seed_scion_path
         git_command="git pull"
         # execute git command
         try:
-          retcode = subprocess.check_call(git_command, cwd = local_seed_depot_path)
+          retcode = subprocess.check_call(git_command, shell=True, cwd = local_seed_depot_path)
           if retcode < 0:
             print("error: ", git_command," : ", -retcode, file=sys.stderr)
           else:
