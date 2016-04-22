@@ -10,9 +10,9 @@ setup(
     name='scion',
     version=metadata['version'],
     description=metadata['doc'],
+    url=metadata['url'],
     author=metadata['author'],
     author_email=metadata['email'],
-    url=metadata['url'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
@@ -21,11 +21,6 @@ setup(
         'Programming Language :: Python :: 3',
     ],
     packages=['scion'],
-    install_requires=io.open('requirements.txt').readlines(),
-    entry_points={
-        'console_scripts': [
-            'scion = scion-py3:main',
-        ],
-    },
-    license=open('LICENSE').read(),
+    install_requires=[],
+    license='Mozilla Public License Version 2.0',
 )
