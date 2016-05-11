@@ -93,13 +93,7 @@ usr_bin_path = usr_dir+"/"+bin_dir
 # version 0.1.0.2
 # command 
 #
-# scion.py seeding --version [master|v.0.1.0.1] https://github.com/lepton-distribution/lepton-seed.scions.git [optional path to .scion directory default scion/.scion]
-#    - get ramification and source list
-#    - clone all depot specifyed in ramification
-#    - grafted list is updated
-# 
-# scion.py update
-#     - update all depot specified in grafted list 
+#
 #    
 # scion.py install
 # 
@@ -108,14 +102,16 @@ usr_bin_path = usr_dir+"/"+bin_dir
 # scion install c:/my/root/stock/path
 #     update in $HOME/.scion.settings/.scion.rootstock.active
 #
-# scion rootstock c:/my/root/stock/path
+# scion root c:/my/root/stock/path
 #   update in $HOME/.scion.settings/.scion.rootstock.active
 #
-# scion seed  --developer --version --force [shelf@scion::name|*-version|*]  https://url/my/depot.git  path/to/scion/.scion 
-#   --developper "git clone" command does not use --single-branch, but version master and checkout branch|version from .scion-ramification 
-#
+# scion.py seed-add --version [master|v.0.1.0.1] https://github.com/lepton-distribution/lepton-seed.scions.git [optional path to .scion directory default scion/.scion]
+#    - get ramification and source list
+#    - clone all depot specifyed in ramification
+#    - grafted list is updated
 # 
-# scion graft-update 
+#
+# scion seed-update 
 # - full update grafted seeds (update seeds):  take into account ramification or source liste change. regenerate  
 #   1: ungraft all
 #   2: get all seeds in in grafted list
@@ -124,16 +120,24 @@ usr_bin_path = usr_dir+"/"+bin_dir
 #   5: update (or clone new scion) all scion in each seed 
 #   6: update grafted list
 #   7: graft all
-#     
+# 
+# scion.py graft-update
+#   - update all depot specified in grafted list 
 #
-#  - lite update only current scions
+# scion graft-add  shelf@scion::name --branch [branch name]  https://url/my/depot.git   [optional:local path]
+#    1: git clone https://url/my/depot.git checkout  [branch name] in rootstock-depot with rules (shelf@scion::name)  (does not use --single-branch) 
+#       check shelf@scion::name not exists in graft list, if exists ask if replace (y/n)
+#    2: ungraft all
+#    3: update grafted list
+#    4: graft all
+#    
 # scion graft-refresh  
 #  1: get all scions in grafted list
 #  2: update scion with his associated .scion  
 #
-# scion graft-add [shelf@scion::name]  [local path] 
+# scion graft-replace [old shelf@scion::name] [new shelf@scion::name]   https://new-url/my/depot.git
+#
 # scion graft-remove [shelf@scion::name]  [local path] 
-# scion graft-replace --from [shelf@scion::name] --to [shelf@scion::name] [local path] 
 # scion graft-clean
 #   - ungraft all scions
 #   - remove grafted list file.
