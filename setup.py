@@ -23,4 +23,7 @@ setup(
     packages=['scion'],
     install_requires=[],
     license='Mozilla Public License Version 2.0',
+    entry_points = {
+        'console_scripts': ['scion=scion.scion:main']
+    }
 )
