@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 ####################################################################
 # scion definition
 #environment variable: active root stock SCION_ROOTSTOCK
-ENV_VAR_ACTIVE_ROOTSTOCK ="SCION_ROOTSTOCK" 
+ENV_VAR_ACTIVE_ROOTSTOCK ="SCION_ROOTSTOCK"
 #
 default_shelf_path="."
 #
@@ -53,17 +53,17 @@ building_scion_dir="building"
 # seed. shelf lepton, scion root  $SCION_ROOTSTOCK/depots/lepton/root
 seed_lepton_root_path="lepton/root"
 
-# $SCION_ROOTSTOCK/depots/ ... scion local location ... /scion/.scion/.scion.sources.list 
+# $SCION_ROOTSTOCK/depots/ ... scion local location ... /scion/.scion/.scion.sources.list
 scion_sources_list_file=".scion.sources.list"
 
-# $SCION_ROOTSTOCK/depots/ ... scion local location ... /scion/.scion/.scion.ramification 
+# $SCION_ROOTSTOCK/depots/ ... scion local location ... /scion/.scion/.scion.ramification
 scion_ramification_file=".scion.ramifications"
 
 # $SCION_ROOTSTOCK/tauon/.scion.grafted.list
 scion_grafted_list_file=".scion.grafted.list"
 
 
-# .../src/, -/build/[scion name]/,    
+# .../src/, -/build/[scion name]/,
 src_dir="src"
 build_dir="build"
 
@@ -88,15 +88,15 @@ usr_dir="usr"
 sbin_dir="sbin"
 bin_dir="bin"
 usr_sbin_path = usr_dir+"/"+sbin_dir
-usr_bin_path = usr_dir+"/"+bin_dir 
+usr_bin_path = usr_dir+"/"+bin_dir
 
 # version 0.1.0.2
-# command 
+# command
 #
 #
-#    
+#
 # scion.py install
-# 
+#
 # active rootstock  path is a container
 #
 # scion install c:/my/root/stock/path
@@ -109,35 +109,35 @@ usr_bin_path = usr_dir+"/"+bin_dir
 #    - get ramification and source list
 #    - clone all depot specifyed in ramification
 #    - grafted list is updated
-# 
 #
-# scion seed-update 
-# - full update grafted seeds (update seeds):  take into account ramification or source liste change. regenerate  
+#
+# scion seed-update
+# - full update grafted seeds (update seeds):  take into account ramification or source liste change. regenerate
 #   1: ungraft all
 #   2: get all seeds in in grafted list
 #   3: get .scion of each seed in grafted list
 #   4: update each seeds in grafted list
-#   5: update (or clone new scion) all scion in each seed 
+#   5: update (or clone new scion) all scion in each seed
 #   6: update grafted list
 #   7: graft all
-# 
+#
 # scion.py graft-update
-#   - update all depot specified in grafted list 
+#   - update all depot specified in grafted list
 #
 # scion graft-add  shelf@scion::name --branch [branch name]  https://url/my/depot.git   [optional:local path]
-#    1: git clone https://url/my/depot.git checkout  [branch name] in rootstock-depot with rules (shelf@scion::name)  (does not use --single-branch) 
+#    1: git clone https://url/my/depot.git checkout  [branch name] in rootstock-depot with rules (shelf@scion::name)  (does not use --single-branch)
 #       check shelf@scion::name not exists in graft list, if exists ask if replace (y/n)
 #    2: ungraft all
 #    3: update grafted list
 #    4: graft all
-#    
-# scion graft-refresh  
+#
+# scion graft-refresh
 #  1: get all scions in grafted list
-#  2: update scion with his associated .scion  
+#  2: update scion with his associated .scion
 #
 # scion graft-replace [old shelf@scion::name] [new shelf@scion::name]   https://new-url/my/depot.git
 #
-# scion graft-remove [shelf@scion::name]  [local path] 
+# scion graft-remove [shelf@scion::name]  [local path]
 # scion graft-clean
 #   - ungraft all scions
 #   - remove grafted list file.
@@ -145,13 +145,13 @@ usr_bin_path = usr_dir+"/"+bin_dir
 ####################################################################
 # scion global var definitions
 ####################################################################
-# scion source list 
+# scion source list
 scions_sources_list = list()
-# scion ramification 
+# scion ramification
 scions_list = list()
-# scion grafted list 
+# scion grafted list
 scions_grafted_dictionary = OrderedDict()
-# seeds grafted list 
+# seeds grafted list
 seeds_grafted_dictionnary = OrderedDict()
 
 
@@ -178,7 +178,7 @@ if os.name == "nt":
 # scion utils functions
 ####################################################################
 # compare version
-# print(compare('1.0', 'beta13'))    
+# print(compare('1.0', 'beta13'))
 # print(compare('1.1.2', '1.1.2'))
 # print(compare('1.2.2', '1.1.2'))
 # print(compare('1.1.beta1', '1.1.beta2'))
@@ -201,7 +201,7 @@ def grow_branch(path):
       os.makedirs(dir)
       print("new branch\n", dir)
 
-#  
+#
 def grow_tree(arg_install_path,arg_tree):
    for path in arg_tree :
        full_path=arg_install_path+"/"+path
@@ -226,7 +226,7 @@ def get_current_scion_path():
 # rootstock functions ~/.scion.settings/.scion.rootstock.active
 ####################################################################
 #
-def extract_active_rootsock_path(line): 
+def extract_active_rootsock_path(line):
    active_rootsock_label = line.split(" ")[0]
    active_rootsock_path = line.split(" ")[1]
    return  active_rootsock_path
@@ -257,7 +257,7 @@ def get_active_rootstock_path(rootstock_active_file_path):
               continue
             #
    except IOError:
-      print ("warning file ", rootstock_active_file_path, " not exist\n") 
+      print ("warning file ", rootstock_active_file_path, " not exist\n")
    return ""
 
 #
@@ -284,7 +284,7 @@ def set_active_rootstock_path(rootstock_active_file_path,active_rootsock_path):
 # scion ramification functions ..../scion/.scion/.scion.ramification
 # list of: shelf scion version
 ####################################################################
-def extract_scion_entry(line): 
+def extract_scion_entry(line):
    shelf = line.split(" ")[0]
    scion = line.split(" ")[1]
    version = line.split(" ")[2]
@@ -311,7 +311,7 @@ def read_ramification(file_path):
             print ("entry[", entry_index, "]: " ,entry)
             entry_index=entry_index+1
    except IOError:
-      print ("error file ", file_path," not exist\n" ) 
+      print ("error file ", file_path," not exist\n" )
 
 def write_ramification(file_path,entry):
    with open(file_path,"a+") as f:
@@ -320,8 +320,8 @@ def write_ramification(file_path,entry):
       scions_list.append(entry)
       f.truncate(0)
       f.write("\n".join(scions_list))
-      print ("-> entry: " , entry ," added") 
- 
+      print ("-> entry: " , entry ," added")
+
 def remove_ramification(file_path,entry_index):
    with open(file_path,"a+") as f:
       read_ramification(file_path)
@@ -332,10 +332,10 @@ def remove_ramification(file_path,entry_index):
 
 
 ####################################################################
-# scion location (git url, local path) functions .../scion/.scion/.scion.sources.list 
+# scion location (git url, local path) functions .../scion/.scion/.scion.sources.list
 # list of: shelf scion version location  (git url, local path)
 ####################################################################
-def extract_source_entry(line): 
+def extract_source_entry(line):
    shelf = line.split(" ")[0]
    scion = line.split(" ")[1]
    version = line.split(" ")[2]
@@ -390,15 +390,15 @@ def get_scion_location(sources_list_file_path,shelf,scion,version):
 
 
 ####################################################################
-# scion graft preparation functions. 
-# read scions list in .scion.ramification, find location in .scion.sources.list 
+# scion graft preparation functions.
+# read scions list in .scion.ramification, find location in .scion.sources.list
 # and generate ($SCION_ROOTSTOCK/tauon/.scion.grafted.list)
 ####################################################################
 #added scion in scion graft list files
-def extract_scions_grafted_entry(line): 
+def extract_scions_grafted_entry(line):
    shelf = line.split(" ")[0]
    scion = line.split(" ")[1]
-   version = line.split(" ")[2] 
+   version = line.split(" ")[2]
    location = line.split(" ")[3] # repository local location with scion path
    #
    try:
@@ -458,9 +458,9 @@ def scions_grafted_clean(rootstock_path):
    except OSError:
       print ("error: file ", scion_grafted_list_file_path, " cannot be removed\n")
 
-      
+
 ####################################################################
-# git repositry management download, update 
+# git repositry management download, update
 ####################################################################
 def scion_graft_git_update(entry_key,sources_list_file_path,rootstock_path,shelf,scion,version):
    # entry does not exists: new entry.
@@ -513,21 +513,21 @@ def scion_graft_git_clone(entry_key,seed_dot_scion_path,sources_list_file_path,r
       if(len(path)>0):
         entry=entry+"/"+path
       #add seed .scion path
-      entry = entry+' '+seed_dot_scion_path 
+      entry = entry+' '+seed_dot_scion_path
       # add entry
-      scions_grafted_dictionary[entry_key]=entry 
+      scions_grafted_dictionary[entry_key]=entry
 
    else:
-      # location_url is a local location 
+      # location_url is a local location
       #
       entry = shelf+" "+scion+" "+ version+" "+location_url
       if(len(path)>0):
         entry=entry+"/"+path
       #add seed .scion path
-      entry = entry+' '+seed_dot_scion_path 
+      entry = entry+' '+seed_dot_scion_path
       # add entry
-      scions_grafted_dictionary[entry_key]=entry 
-   
+      scions_grafted_dictionary[entry_key]=entry
+
 #
 def scion_graft_scions_update(seed_dot_scion_path,sources_list_file_path,rootstock_path):
    #
@@ -558,14 +558,14 @@ def scion_graft_scions_update(seed_dot_scion_path,sources_list_file_path,rootsto
             #if used new scion version from ramification file instead version from grafted files then download it.
          elif (compare(version,version_grafted)<0):
             #nothing to do
-            print ("information: scions ", scion, " version ", version, " from shelf " ,shelf," : current version ", version_grafted," is more recent.") 
+            print ("information: scions ", scion, " version ", version, " from shelf " ,shelf," : current version ", version_grafted," is more recent.")
          else:
           print ("information: scions ", scion, " version ", version, " from shelf " ,shelf," is existing in depots. Updating...\n")
           scion_graft_git_update(entry_key,sources_list_file_path,rootstock_path,shelf,scion,version)
           print ("information: scions ", scion, " version ", version, " from shelf " ,shelf," Updated\n")
       else:
         scion_graft_git_clone(entry_key,seed_dot_scion_path,sources_list_file_path,rootstock_path,shelf,scion,version)
-        
+
       #end try except
    #end for
    scions_grafted_update(rootstock_path)
@@ -599,16 +599,16 @@ def scion_graft_scions_clone(seed_dot_scion_path,sources_list_file_path,rootstoc
             #if used new scion version from ramification file instead version from grafted files then download it.
          elif (compare(version,version_grafted)<0):
             #nothing to do
-            print ("information: scions ", scion, " version ", version, " from shelf " ,shelf," : current version ", version_grafted," is more recent.") 
+            print ("information: scions ", scion, " version ", version, " from shelf " ,shelf," : current version ", version_grafted," is more recent.")
          else:
          	print ("information: scions ", scion, " version ", version, " from shelf " ,shelf," already existing in depots.\n")
       else:
       	scion_graft_git_clone(entry_key,seed_dot_scion_path,sources_list_file_path,rootstock_path,shelf,scion,version)
-        
+
       #end try except
    #end for
    scions_grafted_update(rootstock_path)
-      
+
 
 
 ####################################################################
@@ -616,33 +616,33 @@ def scion_graft_scions_clone(seed_dot_scion_path,sources_list_file_path,rootstoc
 # read ($SCION_ROOTSTOCK/tauon/.scion.grafted.list) and graft each scion
 ####################################################################
 def ungraft_all_scions(rootstock_path):
-   #normalize path separator "/" 
+   #normalize path separator "/"
    rootstock_path = rootstock_path.replace('\\','/')
    #
    dirs = os.listdir(rootstock_path)
    #
-   for file in dirs:      
-      
+   for file in dirs:
+
       if os.path.isdir(rootstock_path+"/"+file):
          print ("dir:", file, "\n" )
          ungraft_all_scions(rootstock_path+"/"+file)
 
-      
+
       if os.path.islink(rootstock_path+"/"+file)==True:
          # remove symbolic link
          link_origin_path=os.readlink(rootstock_path+"/"+file)
          link_origin_real_path= os.path.realpath(link_origin_path)
-         
+
          if os.path.isdir(link_origin_real_path):
             ungraft_all_scions(link_origin_real_path)
-      
+
          try:
-         	print ("ungraft: remove link: ", (rootstock_path+"/"+file), "\n") 
-         	os.remove(rootstock_path+"/"+file) 
+         	print ("ungraft: remove link: ", (rootstock_path+"/"+file), "\n")
+         	os.remove(rootstock_path+"/"+file)
          except OSError:
             print ("error: cannot remove link on: ",(rootstock_path+"/"+file), "\n" )
- 
-#      
+
+#
 def graft_scion(rootstock_path,scion_path):
    #
    #print ("graft scion from: ",scion_path)
@@ -661,7 +661,7 @@ def graft_scion(rootstock_path,scion_path):
       if not os.path.lexists(rootstock_path+"/"+file):
          # make symbolic link
          try:
-            os.symlink(scion_path+"/"+file,rootstock_path+"/"+file) 
+            os.symlink(scion_path+"/"+file,rootstock_path+"/"+file)
             print ("graft : make link from: ", scion_path+"/"+file," to ",(rootstock_path+"/"+file), "\n")
          except OSError:
             print ("error: cannot make link on: ", (rootstock_path+"/"+file), "\n")
@@ -678,12 +678,12 @@ def graft_scions(rootstock_path):
    scions_grafted_cache(rootstock_path)
    #
    for entry in scions_grafted_dictionary.values():
-      #get scion local location   
+      #get scion local location
       try:
          shelf, scion, version, location, path = extract_scions_grafted_entry(entry)
       except IndexError:
          ungraft_all_scions(rootstock_path+"/"+rootstock_trunk_dir)
-         print ("error : missing parameters in line ", entry,"\n. ungraft all\n") 
+         print ("error : missing parameters in line ", entry,"\n. ungraft all\n")
          sys.exit(1)
       # graft scion from local location on rootstock trunk
       location_realpath=os.path.realpath(os.path.expandvars(location))+"/"+scion_stem_dir #+"/"+src_dir
@@ -712,13 +712,13 @@ def graft_update(rootstock_path):
   #
   for entry_key, entry_line in seeds_grafted_dictionnary.items():
     seed_dot_scion_path = entry_line
-    #to do retrieve seed depot path 
+    #to do retrieve seed depot path
     print("seed update : ",seed_dot_scion_path)
     scion_graft_scions_update(seed_dot_scion_path,seed_dot_scion_path+'/'+scion_sources_list_file,rootstock_path)
-  
+
 ####################################################################
 # # scion.py seeding --version [master|v.0.1.0.1] https://github.com/lepton-distribution/lepton-seed.scions.git [optional path to .scion directory default scion/.scion]
-#    - clone seed depot in rootstock/depot/{extract prefix name of depot (prefix).git} 
+#    - clone seed depot in rootstock/depot/{extract prefix name of depot (prefix).git}
 #    - get ramification and source list
 #    - clone all depot specifyed in ramification
 #    - grafted list is updated
@@ -727,7 +727,7 @@ def graft_update(rootstock_path):
 ####################################################################
 #
 def scion_seed_find_dot_scion(path):
-  # walk in depot tree and find all .scion directories 
+  # walk in depot tree and find all .scion directories
   try:
     dirs = os.listdir(path)
   except OSError:
@@ -738,11 +738,11 @@ def scion_seed_find_dot_scion(path):
     if not os.path.isdir(path+"/"+entry):
       continue
     #
-    #print ("dir:", entry, "\n" )     
+    #print ("dir:", entry, "\n" )
     #.scion directory
     if(entry==scion_hidden_dir):
       return path+"/"+entry
-    
+
     found_path=scion_seed_find_dot_scion(path+"/"+entry)
     if(found_path==""):
       continue
@@ -761,7 +761,7 @@ def scion_seed_git_clone(rootstock_path, seed_url, seed_version, seed_scion_path
   git_depot_prefix_name=os.path.splitext(os.path.basename(git_depot_path))[0]
   #
   # local or url
-  if len(parsed_seed_url.scheme)>0: # remote url 
+  if len(parsed_seed_url.scheme)>0: # remote url
     # if distant check if already downloaded
     local_seed_depot_path=rootstock_path+"/"+rootstock_depots_dir+"/"+git_depot_prefix_name+"/"+seed_version
     #check if local git depot exists
@@ -776,7 +776,7 @@ def scion_seed_git_clone(rootstock_path, seed_url, seed_version, seed_scion_path
         print("seed ", seed_url," version: ",seed_version," is downloaded in : ",local_seed_depot_path)
     else:
       print("information: seed ", seed_url," version: ",seed_version," already exists in : ",local_seed_depot_path)
-      #update 
+      #update
       if os.path.exists(local_seed_depot_path+"/.git"):
         # git pull
         git_command="git pull"
@@ -793,14 +793,14 @@ def scion_seed_git_clone(rootstock_path, seed_url, seed_version, seed_scion_path
     #
     return local_seed_depot_path
   #else: #local path
- 
+
 
 #
 def scion_seed_seeding(rootstock_path, seed_url, seed_version, seed_scion_path="scion/.scion"):
   #
   parsed_seed_url=urlparse(seed_url)
   # local or url
-  if len(parsed_seed_url.scheme)>0: # remote url 
+  if len(parsed_seed_url.scheme)>0: # remote url
     local_seed_depot_path = scion_seed_git_clone(rootstock_path, seed_url, seed_version, seed_scion_path)
   else:
     local_seed_depot_path = seed_url
@@ -816,7 +816,7 @@ def scion_seed_seeding(rootstock_path, seed_url, seed_version, seed_scion_path="
 
 
 ####################################################################
-# install scion tools functions ~/.scion.settings/ 
+# install scion tools functions ~/.scion.settings/
 ####################################################################
 def scion_install(home_path, rootstock_path):
     #check if already installed
@@ -833,10 +833,10 @@ def scion_install(home_path, rootstock_path):
     grow_branch(rootstock_path+"/"+rootstock_depots_dir)
     grow_branch(rootstock_path+"/"+rootstock_trunk_dir)
 
-    #scion building. to do : move in depots directory. 
+    #scion building. to do : move in depots directory.
 
     building_scion_path = rootstock_path+"/"+rootstock_depots_dir+"/"+lepton_shelf_dir+"/"+building_scion_dir
-    
+
     grow_branch(building_scion_path+"/"+scion_stem_dir+"/building/projects")
     grow_branch(building_scion_path+"/"+scion_stem_dir+"/building/staging/lib")
     grow_branch(building_scion_path+"/"+scion_stem_dir+"/building/output")
@@ -847,9 +847,9 @@ def scion_install(home_path, rootstock_path):
     grow_branch(building_scion_path+"/"+scion_stem_dir+"/sys/root/src/kernel/core/arch/synthetic/x86")
     grow_branch(building_scion_path+"/"+scion_stem_dir+"/sys/root/src/kernel/core/arch/synthetic/x86_static")
     grow_branch(building_scion_path+"/"+scion_stem_dir+"/sys/root/src/kernel/core/arch/win32")
-    
+
     #
-    #copy this script or make symbolic link from this script to bin 
+    #copy this script or make symbolic link from this script to bin
     #
     set_active_rootstock_path(scion_rootstock_active_file_path,rootstock_path)
     #
@@ -863,11 +863,11 @@ def main():
   scion_settings_path=home_path+"/"+scion_settings_dir
   scion_rootstock_active_file_path=scion_settings_path+"/"+scion_rootstock_active_file
   current_active_rootstock = get_active_rootstock_path(scion_rootstock_active_file_path)
-  print ("current active rootstock path: ", current_active_rootstock) 
+  print ("current active rootstock path: ", current_active_rootstock)
   #
   current_scion_path = get_current_scion_path()
   if(len(current_scion_path)<=0):
-    print ("error : it's not scion directory: ", (scion_stem_dir+"/"+scion_hidden_dir), " not found") 
+    print ("error : it's not scion directory: ", (scion_stem_dir+"/"+scion_hidden_dir), " not found")
     sys.exit(1)
 
   scion_sources_list_file_path= current_scion_path+"/"+scion_hidden_dir+"/"+scion_sources_list_file
@@ -918,7 +918,7 @@ def main():
      scion_install_parser.add_argument("rootstock_path", default=current_active_rootstock)
 
 
-  # arguments for command inventory 
+  # arguments for command inventory
   if(len(current_active_rootstock)>0):
      scion_inventory_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
   else:#required
@@ -939,7 +939,7 @@ def main():
   if len(current_scion_path)>0:
      scion_clone_parser.add_argument("--seed", required=False, default=current_scion_path)
   else:#required
-     scion_clone_parser.add_argument("--seed", required=True) 
+     scion_clone_parser.add_argument("--seed", required=True)
   #
   if(len(current_active_rootstock)>0):
      scion_clone_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
@@ -950,7 +950,7 @@ def main():
   if len(current_scion_path)>0:
      scion_update_parser.add_argument("--seed", required=False, default=current_scion_path)
   else:#required
-     scion_update_parser.add_argument("--seed", required=True)  
+     scion_update_parser.add_argument("--seed", required=True)
   #
   if(len(current_active_rootstock)>0):
      scion_update_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
@@ -971,22 +971,22 @@ def main():
      scion_graft_update_parser.add_argument("rootstock_path", default=current_active_rootstock)
 
   # arguments for command graft
-  if(len(current_active_rootstock)>0): 
+  if(len(current_active_rootstock)>0):
      scion_graft_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
   else:
      scion_graft_parser.add_argument("rootstock_path", default=current_active_rootstock)
 
 
   # arguments for command ungraft
-  if(len(current_active_rootstock)>0): 
+  if(len(current_active_rootstock)>0):
      scion_ungraft_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
   else: #required
      scion_ungraft_parser.add_argument("rootstock_path",default=current_active_rootstock)
 
-   
+
   # parse commande line
   args = vars(parser.parse_args())
-  print("args ",args,"\n") 
+  print("args ",args,"\n")
 
   #set env var
   os.environ[ENV_VAR_ACTIVE_ROOTSTOCK] = args["rootstock_path"]
@@ -1000,7 +1000,7 @@ def main():
      scion_install(home_path,rootstock_path)
 
 
-  # inventory 
+  # inventory
   if args["which"]=="inventory":
      rootstock_path=args["rootstock_path"]
      #
@@ -1015,14 +1015,14 @@ def main():
      #
      rootstock_path = os.path.realpath(rootstock_path)
      #
-     seed_url=args["seed_url"] 
-     seed_version =args["version"] 
+     seed_url=args["seed_url"]
+     seed_version =args["version"]
      #
      scion_seed_seeding(rootstock_path, seed_url, seed_version)
-     
 
-  # clone 
-  if args["which"]=="clone": 
+
+  # clone
+  if args["which"]=="clone":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
@@ -1037,7 +1037,7 @@ def main():
      scion_graft_scions_clone(seed_dot_scion_path,seed_dot_scion_path+'/'+sources_list_file_path,rootstock_path)
 
    # update
-  if args["which"]=="update": 
+  if args["which"]=="update":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
@@ -1075,23 +1075,24 @@ def main():
 
 
   # graft
-  if args["which"]=="graft": 
+  if args["which"]=="graft":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
-     # ungraft all if previous graft operation was done 
+     # ungraft all if previous graft operation was done
      ungraft_all_scions(rootstock_path+"/"+rootstock_trunk_dir)
      #
      graft_scions(rootstock_path)
 
   # ungraft
-  if args["which"]=="ungraft": 
+  if args["which"]=="ungraft":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
      #
      ungraft_all_scions(rootstock_path+"/"+rootstock_trunk_dir)
 
-#
-main()
+# launch main function only if invoked directly, not in an import
+if __name__ == '__main__':
+    main()
 #end of script
