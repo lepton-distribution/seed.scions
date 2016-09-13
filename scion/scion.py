@@ -90,7 +90,7 @@ bin_dir="bin"
 usr_sbin_path = usr_dir+"/"+sbin_dir
 usr_bin_path = usr_dir+"/"+bin_dir
 
-# version 0.1.0.2
+# version 0.3.0.1
 # command
 #
 #
@@ -826,8 +826,8 @@ def scion_install(home_path, rootstock_path):
       #if not installed: create ~/.scion/
       grow_branch(home_scion_settings_dir)
       grow_branch(home_scion_settings_dir+"/bin")
-      #copy myself (scion.py) in  ~/.scion/
-      shutil.copy2(sys.argv[0], home_scion_settings_dir+"/bin")
+      #deprecated now, we use pypi : (copy myself (scion.py) in  ~/.scion/)
+      #shutil.copy2(sys.argv[0], home_scion_settings_dir+"/bin")
       #to dochange .profile
 
     grow_branch(rootstock_path+"/"+rootstock_depots_dir)
@@ -857,6 +857,7 @@ def scion_install(home_path, rootstock_path):
 def main():
   #main part
   print ("python version: ", sys.version)
+  print ("scion version: 0.3.0.1")
 
   # init variable
   home_path = expanduser("~")
@@ -884,18 +885,18 @@ def main():
   scion_install_parser = subparsers.add_parser('install', help='install rootstock')
   scion_install_parser.set_defaults(which='install')
 
-  # command seeding
-  scion_seeding_parser = subparsers.add_parser('seeding', help='install rootstock')
-  scion_seeding_parser.set_defaults(which='seeding')
-  # command inventory
-  scion_inventory_parser = subparsers.add_parser('inventory', help='scion inventory in rootstock ')
-  scion_inventory_parser.set_defaults(which='inventory')
-  # command clone
-  scion_clone_parser = subparsers.add_parser('clone', help='clone all scions will be grafted')
-  scion_clone_parser.set_defaults(which='clone')
-  # command update
-  scion_update_parser = subparsers.add_parser('update', help='update all scions in grafted list')
-  scion_update_parser.set_defaults(which='update')
+  # command seed-do
+  scion_seeding_parser = subparsers.add_parser('seed-do', help='install rootstock')
+  scion_seeding_parser.set_defaults(which='seed-do')
+  # command seed-list
+  scion_inventory_parser = subparsers.add_parser('seed-list', help='scion inventory in rootstock ')
+  scion_inventory_parser.set_defaults(which='seed-list')
+  # command seed-clone
+  scion_clone_parser = subparsers.add_parser('seed-clone', help='clone all scions will be grafted')
+  scion_clone_parser.set_defaults(which='seed-clone')
+  # command seed-update
+  scion_update_parser = subparsers.add_parser('seed-update', help='update all scions in grafted list')
+  scion_update_parser.set_defaults(which='seed-update')
 
   # command graft-clean
   scion_graft_clean_parser = subparsers.add_parser('graft-clean', help='clean grafted list')
@@ -903,12 +904,12 @@ def main():
   # command graft-update
   scion_graft_update_parser = subparsers.add_parser('graft-update', help='update grafted seeds in grafted list')
   scion_graft_update_parser.set_defaults(which='graft-update')
-  # command graft
-  scion_graft_parser = subparsers.add_parser('graft', help='graft scions on rootstock')
-  scion_graft_parser.set_defaults(which='graft')
-  # command ungraft
-  scion_ungraft_parser = subparsers.add_parser('ungraft', help='ungraft all scions rootstock')
-  scion_ungraft_parser.set_defaults(which='ungraft')
+  # command graft-do
+  scion_graft_parser = subparsers.add_parser('graft-do', help='graft scions on rootstock')
+  scion_graft_parser.set_defaults(which='graft-do')
+  # command graft-undo
+  scion_ungraft_parser = subparsers.add_parser('graft-undo', help='ungraft all scions rootstock')
+  scion_ungraft_parser.set_defaults(which='graft-undo')
 
 
   # arguments for command install
@@ -918,14 +919,14 @@ def main():
      scion_install_parser.add_argument("rootstock_path", default=current_active_rootstock)
 
 
-  # arguments for command inventory
+  # arguments for command seed-list: inventory
   if(len(current_active_rootstock)>0):
      scion_inventory_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
   else:#required
      scion_inventory_parser.add_argument("rootstock_path", default=current_active_rootstock)
 
 
-  # arguments for command seeding
+  # arguments for command seed-do
   if(len(current_active_rootstock)>0):
      scion_seeding_parser.add_argument("--version",nargs='?', default=default_seed_version)
      scion_seeding_parser.add_argument("seed_url",nargs='?')
@@ -935,7 +936,7 @@ def main():
      scion_seeding_parser.add_argument("seed_url",nargs='?')
      scion_seeding_parser.add_argument("rootstock_path",default=current_active_rootstock)
 
-  # arguments for command clone
+  # arguments for command seed-clone
   if len(current_scion_path)>0:
      scion_clone_parser.add_argument("--seed", required=False, default=current_scion_path)
   else:#required
@@ -946,7 +947,7 @@ def main():
   else:#required
      scion_clone_parser.add_argument("rootstock_path",default=current_active_rootstock)
 
-  # arguments for command update
+  # arguments for command seed-update
   if len(current_scion_path)>0:
      scion_update_parser.add_argument("--seed", required=False, default=current_scion_path)
   else:#required
@@ -970,14 +971,14 @@ def main():
   else:#required
      scion_graft_update_parser.add_argument("rootstock_path", default=current_active_rootstock)
 
-  # arguments for command graft
+  # arguments for command graft-do
   if(len(current_active_rootstock)>0):
      scion_graft_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
   else:
      scion_graft_parser.add_argument("rootstock_path", default=current_active_rootstock)
 
 
-  # arguments for command ungraft
+  # arguments for command graft-undo
   if(len(current_active_rootstock)>0):
      scion_ungraft_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
   else: #required
@@ -1000,8 +1001,8 @@ def main():
      scion_install(home_path,rootstock_path)
 
 
-  # inventory
-  if args["which"]=="inventory":
+  # inventory: seed-list
+  if args["which"]==" seed-list":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
@@ -1009,8 +1010,8 @@ def main():
      inventory_active_rootstock_path(rootstock_path)
 
 
-  # seeding
-  if args["which"]=="seeding":
+  # seeding: seed-do
+  if args["which"]=="seed-do":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
@@ -1021,8 +1022,8 @@ def main():
      scion_seed_seeding(rootstock_path, seed_url, seed_version)
 
 
-  # clone
-  if args["which"]=="clone":
+  # clone: seed-clone
+  if args["which"]=="seed-clone":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
@@ -1036,8 +1037,8 @@ def main():
      #
      scion_graft_scions_clone(seed_dot_scion_path,seed_dot_scion_path+'/'+sources_list_file_path,rootstock_path)
 
-   # update
-  if args["which"]=="update":
+   # update: seed-update
+  if args["which"]=="seed-update":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
@@ -1074,8 +1075,8 @@ def main():
      #graft_scions(rootstock_path)
 
 
-  # graft
-  if args["which"]=="graft":
+  # graft: graft-do
+  if args["which"]=="graft-do":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
@@ -1084,8 +1085,8 @@ def main():
      #
      graft_scions(rootstock_path)
 
-  # ungraft
-  if args["which"]=="ungraft":
+  # ungraft: graft-undo
+  if args["which"]=="graft-undo":
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
