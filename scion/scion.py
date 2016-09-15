@@ -1000,7 +1000,12 @@ def main():
 
   # parse commande line
   args = vars(parser.parse_args())
-  print("args ",args,"\n")
+  print("args (",len(args),") ",args,"\n")
+
+  if(len(args)==0):
+    print("scion tools:\n")
+    parser.print_help()
+    sys.exit(0)
 
   #set env var
   os.environ[ENV_VAR_ACTIVE_ROOTSTOCK] = args["rootstock_path"]
