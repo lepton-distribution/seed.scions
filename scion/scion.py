@@ -897,7 +897,7 @@ def main():
   #main part
   print ("python version: ", sys.version)
   #date 27/09/2016
-  print ("scion version: 0.3.1.0")
+  print ("scion version: 0.3.1.2")
 
   # init variable
   home_path = expanduser("~")
@@ -928,29 +928,29 @@ def main():
   scion_rootstock_change_parser.set_defaults(which='rootstock-change')
 
   # command seed-add
-  scion_seeding_parser = subparsers.add_parser('seed-add', help='install rootstock')
+  scion_seeding_parser = subparsers.add_parser('seed-add', help='add seed in current rootstock repository and add scion in graft list')
   scion_seeding_parser.set_defaults(which='seed-add')
   # command seed-list
-  scion_inventory_parser = subparsers.add_parser('seed-list', help='scion inventory in rootstock ')
+  scion_inventory_parser = subparsers.add_parser('seed-list', help='scion inventory in current rootstock repository')
   scion_inventory_parser.set_defaults(which='seed-list')
   # command seed-clone
   scion_clone_parser = subparsers.add_parser('seed-clone', help='clone all scions will be grafted')
   scion_clone_parser.set_defaults(which='seed-clone')
   # command seed-update
-  scion_update_parser = subparsers.add_parser('seed-update', help='update all scions in grafted list')
+  scion_update_parser = subparsers.add_parser('seed-update', help='update all scions in graft list')
   scion_update_parser.set_defaults(which='seed-update')
 
   # command graft-clean
-  scion_graft_clean_parser = subparsers.add_parser('graft-clean', help='clean grafted list')
+  scion_graft_clean_parser = subparsers.add_parser('graft-clean', help='clean graft list')
   scion_graft_clean_parser.set_defaults(which='graft-clean')
   # command graft-update
-  scion_graft_update_parser = subparsers.add_parser('graft-update', help='update grafted seeds in grafted list')
+  scion_graft_update_parser = subparsers.add_parser('graft-update', help='update grafted seeds in graftlist')
   scion_graft_update_parser.set_defaults(which='graft-update')
   # command graft
-  scion_graft_parser = subparsers.add_parser('graft', help='graft scions on rootstock')
+  scion_graft_parser = subparsers.add_parser('graft', help='graft scions from seeds on current rootstock')
   scion_graft_parser.set_defaults(which='graft')
   # command ungraft
-  scion_ungraft_parser = subparsers.add_parser('ungraft', help='ungraft all scions rootstock')
+  scion_ungraft_parser = subparsers.add_parser('ungraft', help='ungraft all scions on current rootstock')
   scion_ungraft_parser.set_defaults(which='ungraft')
 
 
@@ -1102,16 +1102,16 @@ def main():
 
   # update: seed-update
   if args["which"]=="seed-update":
+     seed_path=args["seed"]
      #
-     if(len(current_scion_path)<=0):
-       print ("error : it's not scion directory: ", (scion_stem_dir+"/"+scion_hidden_dir), " not found")
-       sys.exit(0)
+     if(len(seed_path)<=0):
+      if(len(current_scion_path)<=0):
+        print ("error : it's not scion directory: ", (scion_stem_dir+"/"+scion_hidden_dir), " not found")
+        sys.exit(0)
      #
      rootstock_path=args["rootstock_path"]
      #
      rootstock_path = os.path.realpath(rootstock_path)
-     #
-     seed_path=args["seed"]
      #
      seed_dot_scion_path = scion_seed_find_dot_scion(seed_path)
      if(seed_dot_scion_path =="" ):
