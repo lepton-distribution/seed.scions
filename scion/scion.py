@@ -1013,7 +1013,7 @@ def main():
   else:#required
      scion_graft_clean_parser.add_argument("rootstock_path", default=current_active_rootstock)
 
-  # arguments for command graft-clean
+  # arguments for command graft-update
   if(len(current_active_rootstock)>0):
      scion_graft_update_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
   else:#required
