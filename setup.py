@@ -1,5 +1,6 @@
 import io
 import re
+import setuptools
 from setuptools import setup
 
 init_py = io.open('scion/__init__.py').read()
@@ -20,7 +21,7 @@ setup(
         'License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)',
         'Programming Language :: Python :: 3',
     ],
-    packages=['scion'],
+    packages=setuptools.find_packages(),
     install_requires=[],
     license='Mozilla Public License Version 2.0',
     entry_points = {
