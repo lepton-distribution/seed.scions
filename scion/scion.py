@@ -60,6 +60,9 @@ building_scion_dir="building"
 # seed. shelf lepton, scion root  $SCION_ROOTSTOCK/depots/lepton/root
 # seed_lepton_root_path="lepton/root"
 
+# $SCION_ROOTSTOCK/
+scion_rootstock_signature=".scion.rootstock.signature"
+
 # $SCION_ROOTSTOCK/depots/ ... scion local location ... /scion/.scion/.scion.sources.list
 scion_sources_list_file=".scion.sources.list"
 
@@ -955,6 +958,8 @@ def scion_rootstock_install(home_path, rootstock_path,user_defined_trunk_dir="")
       #if not installed: create ~/.scion/
       grow_branch(home_scion_settings_dir)
 
+    # create scion rootstock signature
+    open(rootstock_path+"/"+scion_rootstock_signature, 'a').close()
     # clone/download local destination depot
     grow_branch(rootstock_path+"/"+rootstock_depots_dir)
 
@@ -962,6 +967,9 @@ def scion_rootstock_install(home_path, rootstock_path,user_defined_trunk_dir="")
       #
       rootstock_trunk_dir=user_defined_trunk_dir
       grow_branch(rootstock_path+"/"+rootstock_trunk_dir)
+
+      #added empty grafted list file
+      open(rootstock_path+"/"+rootstock_trunk_dir+"/"+scion_grafted_list_file, 'a').close()
       
       #input: origin
       root_scion_dir = rootstock_path+"/"+rootstock_depots_dir
@@ -998,18 +1006,75 @@ def scion_rootstock_install(home_path, rootstock_path,user_defined_trunk_dir="")
     set_active_rootstock_path(scion_rootstock_active_file_path,rootstock_path,rootstock_trunk_dir)
     #
 
+# recursive lookup a specific file in tree from current_path
+def lookup_specific_file_path(current_path,specific_filename):
+  try:
+    dirs = os.listdir(current_path)
+  except OSError:
+    print ("error: cannot list directory ", current_path)
+    return ""
+  
+  #
+  for entry_name in dirs:
+    if os.path.isdir(current_path+"/"+entry_name):
+      #find scion signature .scion.grafted.list
+      found_trunk_dir=lookup_specific_file_path(current_path+"/"+entry_name,specific_filename)
+      if(len(found_trunk_dir)>0):
+        return found_trunk_dir
+    elif(os.path.exists(current_path+"/"+specific_filename)):
+      print ("found ", specific_filename ,"file in this directory: ", current_path)
+      return current_path
+  #not found
+  return ""
+
+  # recursive lookup trunk directory name
+def lookup_trunk_directory_name(current_path,specific_filename):
+  try:
+    dirs = os.listdir(current_path)
+  except OSError:
+    print ("error: cannot list directory ", current_path)
+    return ""
+  
+  #
+  for entry_name in dirs:
+    if os.path.isdir(current_path+"/"+entry_name):
+      #find scion signature .scion.grafted.list
+      found_trunk_dir_name=lookup_trunk_directory_name(current_path+"/"+entry_name,specific_filename)
+      if(len(found_trunk_dir_name)>0):
+        return found_trunk_dir_name
+    elif(os.path.exists(current_path+"/"+specific_filename)):
+      print ("found ", specific_filename ,"file in this directory: ", current_path)
+      return current_path.split("/")[-1]
+  #not found
+  return ""
+
+
+
 def main():
   #main part
   print ("python version: ", sys.version)
   #date 14/01/2019
-  print ("scion version: 0.3.5.1")
-
+  print ("scion version: 0.4.0.1")
 
   # init variable
   home_path = expanduser("~")
-  scion_settings_path=home_path+"/"+scion_settings_dir
-  scion_rootstock_active_file_path=scion_settings_path+"/"+scion_rootstock_active_file
-  current_active_rootstock, current_rootstock_trunk_dir = get_active_rootstock_path(scion_rootstock_active_file_path)
+  #scion_settings_path=home_path+"/"+scion_settings_dir
+  #scion_rootstock_active_file_path=scion_settings_path+"/"+scion_rootstock_active_file
+  #current_active_rootstock, current_rootstock_trunk_dir = get_active_rootstock_path(scion_rootstock_active_file_path)
+
+  current_active_rootstock = ""
+  current_rootstock_trunk_dir = ""
+
+  #find rootstock path and trunkdir in current working directory
+  if(os.path.exists(os.getcwd()+"/"+scion_rootstock_signature)):
+    found_trunk_dir = lookup_trunk_directory_name(os.getcwd(),scion_grafted_list_file)
+    print ("trunk directory: ", found_trunk_dir)
+    #
+    if(len(found_trunk_dir)>0):
+      current_active_rootstock = os.getcwd()
+      current_rootstock_trunk_dir = found_trunk_dir
+
+  #
   print ("current active rootstock path: ", current_active_rootstock)
   # trunk dir
   if(current_rootstock_trunk_dir!=""):
@@ -1027,6 +1092,7 @@ def main():
   scion_sources_list_file_path= current_scion_path+"/"+scion_hidden_dir+"/"+scion_sources_list_file
   print ("current scion path: ",current_scion_path, "\n")
 
+ 
   #seed default version
   default_seed_version="master"
 
@@ -1038,9 +1104,6 @@ def main():
   scion_rootstock_install_parser = subparsers.add_parser('rootstock-install', help='install rootstock')
   scion_rootstock_install_parser.set_defaults(which='rootstock-install')
 
-   # command rootstock-change
-  scion_rootstock_change_parser = subparsers.add_parser('rootstock-change', help='change active rootstock')
-  scion_rootstock_change_parser.set_defaults(which='rootstock-change')
 
   # command seed-add
   scion_seed_add_parser = subparsers.add_parser('seed-add', help='add seed in current rootstock repository and add scion in graft list')
@@ -1074,21 +1137,8 @@ def main():
   scion_git_parser.set_defaults(which='git') 
 
   # arguments for command install rootstock
-  if(len(current_active_rootstock)>0):
-     scion_rootstock_install_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
-     scion_rootstock_install_parser.add_argument("--trunk", required=False, default="")
-  else:#required
-     scion_rootstock_install_parser.add_argument("rootstock_path", default=current_active_rootstock)
-     scion_rootstock_install_parser.add_argument("--trunk", required=False, default="")
-
-  # arguments for command change rootstock
-  if(len(current_active_rootstock)>0):
-     scion_rootstock_change_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
-     scion_rootstock_change_parser.add_argument("--trunk", required=True)
-  else:#required
-     scion_rootstock_change_parser.add_argument("rootstock_path", default=current_active_rootstock)
-
-
+  scion_rootstock_install_parser.add_argument("--trunk", required=False, default="trunk")
+  
   # arguments for command seed-list: inventory
   if(len(current_active_rootstock)>0):
      scion_seed_inventory_parser.add_argument("rootstock_path", nargs='?',default=current_active_rootstock)
@@ -1177,25 +1227,33 @@ def main():
     parser.print_help()
     sys.exit(0)
 
-  #set env var
-  os.environ[ENV_VAR_ACTIVE_ROOTSTOCK] = args["rootstock_path"]
-
+  
   # rootstock-install
   if args["which"]=="rootstock-install":
-     rootstock_path=args["rootstock_path"]
-     #
-     rootstock_path = os.path.realpath(rootstock_path)
-     trunk_dir =args["trunk"]
-     #
-     scion_rootstock_install(home_path,rootstock_path,trunk_dir)
+    rootstock_path=os.getcwd()
 
-  if args["which"]=="rootstock-change":
-     rootstock_path=args["rootstock_path"]
-     #
-     rootstock_path = os.path.realpath(rootstock_path)
-     trunk_dir =args["trunk"]
-     #
-     scion_rootstock_change(home_path,rootstock_path,trunk_dir)
+    #set env var
+    os.environ[ENV_VAR_ACTIVE_ROOTSTOCK] = rootstock_path
+
+    #
+    if len(os.listdir(rootstock_path)) > 0:
+      print("error: install directory is not empty!\n")
+      return;
+    #
+    rootstock_path = os.path.realpath(rootstock_path)
+    trunk_dir =args["trunk"]
+    #
+    scion_rootstock_install(home_path,rootstock_path,trunk_dir)
+    #
+    return
+
+  #
+  if(len(current_active_rootstock)==0):
+    print("error: not in active rootstock!\n")
+    return;
+
+  #set env var
+  os.environ[ENV_VAR_ACTIVE_ROOTSTOCK] = current_active_rootstock
 
   # inventory: seed-list
   if args["which"]=="seed-list":
