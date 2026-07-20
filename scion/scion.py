@@ -23,6 +23,8 @@ from urllib.parse import urlparse
 # scion const definitions
 ####################################################################
 # scion definition
+STR_SCION_TOOL_VERSION = "0.4.1.3-develop" 
+
 #environment variable: active root stock SCION_ROOTSTOCK
 ENV_VAR_ACTIVE_ROOTSTOCK ="SCION_ROOTSTOCK"
 #
@@ -241,7 +243,7 @@ def get_current_scion_path():
   #current_path = os.path.realpath(sys.argv[0]).rsplit("/")
   current_path = os.path.realpath(os.getcwd()).replace("\\","/").rsplit("/")
   #
-  print ("current path: " , current_path)
+  # print ("current path: " , current_path)
   #
   scion_path=list()
   for dir in current_path:
@@ -511,6 +513,7 @@ def scion_graft_git_update(entry_key,sources_list_file_path,rootstock_path,shelf
    if len(parsed_location_url.netloc)>0:
       # if distant check if already downloaded
       prefix_scion_name = scion.split("::")[0] #scion name [prefix root-scion-name]['::' suffix sub-scion-name]
+      suffix_scion_name = scion.split("::")[1] #scion name [prefix root-scion-name]['::' suffix sub-scion-name]
       local_scion_depot_path=rootstock_path+"/"+rootstock_depots_dir+"/"+shelf+"/"+prefix_scion_name+"/"+version
       #check if local git depot exists
       if os.path.exists(local_scion_depot_path+"/.git"):
@@ -537,6 +540,7 @@ def scion_graft_git_clone(entry_key,local_seed_depot_path,seed_dot_scion_path,so
    if len(parsed_location_url.netloc)>0:
       # if distant check if already downloaded
       prefix_scion_name = scion.split("::")[0] #scion name [prefix root-scion-name]['.' suffix sub-scion-name]
+      suffix_scion_name = scion.split("::")[1] #scion name [prefix root-scion-name]['::' suffix sub-scion-name]
       local_scion_depot_path=rootstock_path+"/"+rootstock_depots_dir+"/"+shelf+"/"+prefix_scion_name+"/"+version
       #check if local git depot exists
       if not os.path.exists(local_scion_depot_path+"/.git"):
@@ -563,6 +567,18 @@ def scion_graft_git_clone(entry_key,local_seed_depot_path,seed_dot_scion_path,so
                   print("scions from depot ", location_url ," chechout on branch", version, "succeed: ", retcode, file=sys.stderr)
             except subprocess.CalledProcessError as e:
                print("error: execution failed:", e, file=sys.stderr)
+         if(seed_all_branches==False and version!="master"):
+            git_command="git checkout "+version+ " -b " + version + "-branch" 
+            # execute git command
+            try:
+               retcode = subprocess.check_call(git_command, shell=True, cwd = local_scion_depot_path)
+               if retcode < 0:
+                  print("error: ", git_command," : ", -retcode, file=sys.stderr)
+               else:
+                  print("scions from depot ", location_url ," chechout on branch", version, "succeed: ", retcode, file=sys.stderr)
+            except subprocess.CalledProcessError as e:
+               print("error: execution failed:", e, file=sys.stderr)
+
 
       # create new entry
       entry =shelf+" "+scion+" "+ version+" "+local_scion_depot_path
@@ -874,9 +890,12 @@ def scion_seed_git_clone(rootstock_path, seed_url, seed_all_branches, seed_versi
       # git clone -b v-0.0.0.1 --single-branch git://ks354041.kimsufi.com/scion-shelves/lepton-kernel.scion.git ./lepton/kernel/v-0.0.0.1
       print ("debug : seed_all_branches = ",seed_all_branches)
       if(seed_all_branches==True):
-        git_command="git clone "+seed_url+" "+local_seed_depot_path
+         if(seed_version=="master"): # default head master branch in seed depot 
+            git_command="git clone "+seed_url+" "+local_seed_depot_path
+         else: # specific version in seed depot
+            git_command="git clone -b "+seed_version+" "+seed_url+" "+local_seed_depot_path
       else:
-        git_command="git clone -b "+seed_version+" --single-branch "+seed_url+" "+local_seed_depot_path
+         git_command="git clone -b "+seed_version+" --single-branch "+seed_url+" "+local_seed_depot_path
       # execute git command
       os.system(git_command)
       if not os.path.exists(local_seed_depot_path+"/.git"):
@@ -1022,7 +1041,7 @@ def lookup_specific_file_path(current_path,specific_filename):
       if(len(found_trunk_dir)>0):
         return found_trunk_dir
     elif(os.path.exists(current_path+"/"+specific_filename)):
-      print ("found ", specific_filename ,"file in this directory: ", current_path)
+      # print ("found ", specific_filename ,"file in this directory: ", current_path)
       return current_path
   #not found
   return ""
@@ -1043,7 +1062,7 @@ def lookup_trunk_directory_name(current_path,specific_filename):
       if(len(found_trunk_dir_name)>0):
         return found_trunk_dir_name
     elif(os.path.exists(current_path+"/"+specific_filename)):
-      print ("found ", specific_filename ,"file in this directory: ", current_path)
+      # print ("found ", specific_filename ,"file in this directory: ", current_path)
       return current_path.split("/")[-1]
   #not found
   return ""
@@ -1051,11 +1070,7 @@ def lookup_trunk_directory_name(current_path,specific_filename):
 
 
 def main():
-  #main part
-  print ("python version: ", sys.version)
-  #date 14/01/2019
-  print ("scion version: 0.4.0.1")
-
+ 
   # init variable
   home_path = expanduser("~")
   #scion_settings_path=home_path+"/"+scion_settings_dir
@@ -1068,14 +1083,12 @@ def main():
   #find rootstock path and trunkdir in current working directory
   if(os.path.exists(os.getcwd()+"/"+scion_rootstock_signature)):
     found_trunk_dir = lookup_trunk_directory_name(os.getcwd(),scion_grafted_list_file)
-    print ("trunk directory: ", found_trunk_dir)
     #
     if(len(found_trunk_dir)>0):
       current_active_rootstock = os.getcwd()
       current_rootstock_trunk_dir = found_trunk_dir
 
-  #
-  print ("current active rootstock path: ", current_active_rootstock)
+  
   # trunk dir
   if(current_rootstock_trunk_dir!=""):
      set_rootstock_trunk_dir(current_rootstock_trunk_dir) 
@@ -1083,15 +1096,13 @@ def main():
     print ("warning: trunk dir not defined, using default rootstock trunk dir")
   #       
   current_rootstock_trunk_dir  = get_rootstock_trunk_dir()
-  print ("current rootstock trunk dir: ",current_rootstock_trunk_dir)
 
   #
   current_scion_path = get_current_scion_path()
 
   #
   scion_sources_list_file_path= current_scion_path+"/"+scion_hidden_dir+"/"+scion_sources_list_file
-  print ("current scion path: ",current_scion_path, "\n")
-
+ 
  
   #seed default version
   default_seed_version="master"
@@ -1099,6 +1110,15 @@ def main():
   # create parsing arguments rules
   parser = argparse.ArgumentParser()
   subparsers = parser.add_subparsers(help='commands')
+
+
+  # command version
+  scion_version_parser = subparsers.add_parser('version', help='print version information')
+  scion_version_parser.set_defaults(which='version')
+
+  # scion rootstock-information
+  scion_rootstock_information_parser = subparsers.add_parser('rootstock-information', help='print rootstock information')
+  scion_rootstock_information_parser.set_defaults(which='rootstock-information')
 
   # command rootstock-install
   scion_rootstock_install_parser = subparsers.add_parser('rootstock-install', help='install rootstock')
@@ -1117,6 +1137,10 @@ def main():
   # command seed-update
   scion_seed_update_parser = subparsers.add_parser('seed-update', help='update all scions in graft list')
   scion_seed_update_parser.set_defaults(which='seed-update')
+  # command seed-tag
+  scion_seed_tag_parser = subparsers.add_parser('seed-tag', help='tag all scions depots')
+  scion_seed_tag_parser.set_defaults(which='seed-tag')
+
   
 
   # command graft-clean
@@ -1220,14 +1244,26 @@ def main():
 
   # parse commande line
   args = vars(parser.parse_args())
-  print("args (",len(args),") ",args,"\n")
+  # print("args (",len(args),") ",args,"\n")
 
   if(len(args)==0):
     print("scion tools:\n")
     parser.print_help()
     sys.exit(0)
 
-  
+  # version 
+  if args["which"]=="version":
+    #
+    print ("python version: ", sys.version)
+    print ("scion version: ", STR_SCION_TOOL_VERSION)
+
+  # rootstock-information
+  if args["which"]=="rootstock-information":
+    #
+    print ("current active rootstock path: ", current_active_rootstock)
+    print ("current rootstock trunk dir: ",current_rootstock_trunk_dir)
+    #print ("current scion path: ",current_scion_path, "\n")
+
   # rootstock-install
   if args["which"]=="rootstock-install":
     rootstock_path=os.getcwd()
