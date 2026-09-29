@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scion"
+dynamic = ["version"]
+description = "Tool to graft scions from several repositories on a single source tree"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Philippe Le Boulanger", email = "lepton.phlb@gmail.com" }]
+dependencies = []
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Homepage = "https://github.com/lepton-distribution/seed.scions"
+
+[project.scripts]
+scion = "scion.cli:main"
+
+[tool.setuptools]
+packages = ["scion"]
+
+[tool.setuptools.dynamic]
+version = { attr = "scion.__version__" }
