@@ -24,9 +24,92 @@ Python ≥ 3.10, bibliothèque standard uniquement. Linux et macOS.
 
 ## Installation
 
+`scion` est un outil en ligne de commande sans aucune dépendance : seule la
+bibliothèque standard est utilisée. Le paquet déclare son point d'entrée dans
+`pyproject.toml`, donc toute installation fournit la commande `scion`.
+
+Les voies ci-dessous sont **exclusives** : elles déposent toutes une commande
+nommée `scion`, généralement dans `~/.local/bin`, et la dernière appliquée
+masque les précédentes. En cas de doute, `command -v scion` dit laquelle
+répond et `scion version` confirme la version obtenue.
+
+### pipx — recommandé
+
+`pipx` place l'outil dans un environnement isolé et sa commande dans
+`~/.local/bin`, sans toucher au Python du système. C'est aussi la seule voie
+propre sur les distributions qui appliquent la [PEP 668][pep668] (Debian,
+Ubuntu, Fedora récents), où `pip install` dans le Python système est refusé.
+
 ```sh
-pip install .
+pipx install .            # depuis le dépôt cloné
+pipx install /chemin/vers/seed.scions
 ```
+
+Mise à jour après modification des sources — `pipx upgrade` ne sert à rien ici,
+l'installation venant d'un chemin local et non d'un index :
+
+```sh
+pipx install --force /chemin/vers/seed.scions
+```
+
+Désinstallation : `pipx uninstall scion`.
+
+[pep668]: https://peps.python.org/pep-0668/
+
+### Mode éditable — pour développer
+
+La commande exécute alors directement les sources du dépôt : toute modification
+est prise en compte immédiatement, sans réinstaller.
+
+```sh
+pipx install --force --editable /chemin/vers/seed.scions
+```
+
+`scion` et `python3 -m scion.cli` ne peuvent alors plus diverger. Une
+modification du `pyproject.toml` (point d'entrée, dépendances) demande en
+revanche de rejouer la commande.
+
+Cette installation dépose `build/` et `*.egg-info/` dans le dépôt ; ils sont
+ignorés par `.gitignore` et peuvent être supprimés à tout moment, la commande
+installée pointant directement sur `scion/`.
+
+### venv et pip
+
+```sh
+python3 -m venv ~/.local/share/scion-venv
+~/.local/share/scion-venv/bin/pip install /chemin/vers/seed.scions
+ln -s ~/.local/share/scion-venv/bin/scion ~/.local/bin/scion
+```
+
+`pip install .` sans environnement virtuel ne convient que si le Python visé
+n'est pas géré par la distribution.
+
+### zipapp — un seul fichier, aucune installation
+
+L'outil n'utilisant que la bibliothèque standard, `zipapp` (lui aussi dans la
+bibliothèque standard) en fait un exécutable autonome d'une trentaine de
+kilo-octets. Utile là où ni `pip` ni `pipx` ne sont disponibles, et pour
+déposer l'outil dans une image de CI.
+
+```sh
+cd /chemin/vers/seed.scions
+mkdir -p /tmp/scion-build && cp -r scion /tmp/scion-build/
+printf 'import sys\nfrom scion.cli import main\nsys.exit(main())\n' \
+    > /tmp/scion-build/__main__.py
+python3 -m zipapp /tmp/scion-build -p "/usr/bin/env python3" -o ~/.local/bin/scion
+chmod +x ~/.local/bin/scion
+```
+
+Le `__main__.py` explicite n'est pas facultatif : l'option `-m` de `zipapp`
+engendre un lanceur qui ignore la valeur de retour de `main()`, ce qui
+écraserait les codes de retour décrits plus bas.
+
+Désinstallation : `rm ~/.local/bin/scion`.
+
+### Sans rien installer
+
+Depuis une copie du dépôt, `python3 -m scion.cli <commande>` est équivalent à
+`scion <commande>`.
 
 ## Commandes
 
