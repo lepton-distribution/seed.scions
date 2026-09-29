@@ -28,16 +28,26 @@ pip install ./seed.scions
 |---|---|
 | dépôt | `lepton-distribution/lepton-seed.scions` |
 | branche | `original-tree` |
-| commit | `71b9c4d` — *use a rootstock-relative path for the building scion* |
+| commit | `083c30b` — *remove the stale Python 2 copy of the scion tool* |
 
 Il déclare deux scions : `lepton original::tree master` (l'arbre Lepton complet,
 `scion/sys/` et `scion/tools/` à la racine du dépôt) et `lepton building *`
 (emplacement de génération local, créé par `rootstock-install`).
 
-La branche `master` du même seed décrit un découpage plus fin (~20 scions sur
-`lepton-root.scions`) qui **n'est pas utilisé par ce chantier**. Elle porte encore
-la forme `$SCION_ROOTSTOCK/depots/lepton/building`, rejetée par scion ≥ 0.5 : à
-corriger le jour où elle servira.
+La branche `master` du même seed décrit un découpage plus fin (20 scions) qui
+**n'est pas utilisé par ce chantier**. Elle a reçu les mêmes corrections
+(commit `f41a23f`) et se résout entièrement avec scion 0.5.0.1 : 20 scions pour
+**3 clones** seulement (`lepton-root.scions`, `lepton-gnu.scions` et
+`bitbucket.org/phlb/lepton-xgui.scions`), les 16 scions `root::*` ne différant
+que par leur colonne « chemin dans le dépôt ». C'est le cas de test de référence
+pour la greffe multi-scions à racine partagée.
+
+Une réserve avant de s'en servir : son scion `building` pointe sur
+`depots/lepton/building`, que `rootstock-install` **ne crée pas** — il produit
+`depots/generation/building`. L'écart est antérieur à la migration : la branche
+de l'ancien outil qui créait le layout Lepton était inatteignable, son option
+`--trunk` valant toujours `trunk`. Il faudra soit créer ce répertoire, soit
+repointer l'entrée.
 
 ## Prérequis de l'étape 1 — reconstitution de l'arbre
 
@@ -117,12 +127,14 @@ Aucun script ni hook ne dépendait de la variable que l'ancien outil positionnai
 dans l'environnement des sous-processus. Sa suppression en 0.5.0.1 est donc sans
 effet sur les builds.
 
-### Copie obsolète de l'outil dans le seed
+### Copie obsolète de l'outil dans le seed — supprimée
 
-`lepton-seed.scions/scion/.scion/scion.py` est une copie Python **2** de scion
-(711 lignes, `from urlparse import urlparse`), inutilisable et sans rapport avec
-la version publiée. Elle n'est lue par rien. À supprimer du seed lors d'un
-prochain passage, pour éviter qu'on la prenne pour l'outil de référence.
+`lepton-seed.scions/scion/.scion/scion.py` était une copie Python **2** de scion
+(711 lignes, `from urlparse import urlparse`, `print` sans parenthèses — elle ne
+s'analysait même pas sous Python 3). Elle n'était lue par rien : l'outil ne lit
+que `.scion.ramifications` et `.scion.sources.list` dans ce répertoire. Retirée
+des deux branches du seed pour qu'on ne la prenne pas pour l'implémentation de
+référence, qui vit dans `lepton-distribution/seed.scions`.
 
 ### Binaires Windows présents dans l'arbre
 
