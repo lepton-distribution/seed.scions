@@ -175,27 +175,71 @@ def graft(rootstock: Rootstock) -> int:
         raise ScionError(
             f"{rootstock.grafted_list} est vide : ajoutez un seed avec « scion seed-add »"
         )
-    trunk = rootstock.trunk
-    trunk.mkdir(parents=True, exist_ok=True)
+    rootstock.trunk.mkdir(parents=True, exist_ok=True)
+    links = _graft_entries(rootstock, list(entries.values()), entries)
+    log.info("greffe : %d feuilles liées dans %s", len(links), rootstock.trunk)
+    return len(links)
 
+
+def _stem(rootstock: Rootstock, entry: GraftedEntry) -> Path:
+    return rootstock.resolve(entry.local_path) / STEM_DIR
+
+
+def _within(relative: Path, base: Path) -> bool:
+    return relative.parts[: len(base.parts)] == base.parts
+
+
+def _owner(rootstock: Rootstock, entries, target: Path) -> str:
+    """Name the scion that put ``target`` in the trunk, ``trunk`` if none did."""
+    relative = target.relative_to(rootstock.trunk)
+    if target.is_symlink():
+        pointed = os.path.normpath(os.path.join(target.parent, os.readlink(target)))
+        for entry in entries.values():
+            stem = os.path.normpath(_stem(rootstock, entry))
+            if pointed.startswith(stem + os.sep):
+                return entry.ref.key
+    elif target.is_dir():
+        for entry in entries.values():
+            if (_stem(rootstock, entry) / relative).is_dir():
+                return entry.ref.key
+    return "trunk"
+
+
+def _graft_entries(rootstock: Rootstock, chosen: list[GraftedEntry], entries) -> list[Path]:
+    """Link the ``chosen`` scions onto the trunk as it stands.
+
+    A directory of the trunk is always a real directory: a scion directory
+    meeting a file or a link is a conflict, and nothing below it is grafted, so
+    that no link is ever created through another link -- that is, inside a
+    clone. On conflict, what this call created is undone.
+    """
+    trunk = rootstock.trunk
     created_dirs: list[Path] = []
     created_links: list[Path] = []
     owners: dict[str, str] = {}
     conflicts: list[tuple[str, str, str]] = []
     try:
-        for entry in entries.values():
-            stem = rootstock.resolve(entry.local_path) / STEM_DIR
+        for entry in chosen:
+            stem = _stem(rootstock, entry)
             if not stem.is_dir():
                 raise ScionError(f"scion « {entry.ref.key} » : {stem} est absent")
+            blocked: list[Path] = []
             for kind, relative in _walk(stem):
+                if any(_within(relative, top) for top in blocked):
+                    continue
                 target = trunk / relative
                 if kind == "dir":
+                    if target.is_symlink() or (os.path.lexists(target) and not target.is_dir()):
+                        first = owners.get(str(relative)) or _owner(rootstock, entries, target)
+                        conflicts.append((str(relative), first, entry.ref.key))
+                        blocked.append(relative)
+                        continue
                     _mkdir(target, created_dirs)
+                    owners.setdefault(str(relative), entry.ref.key)
                     continue
                 if os.path.lexists(target):
-                    conflicts.append(
-                        (str(relative), owners.get(str(relative), "trunk"), entry.ref.key)
-                    )
+                    first = owners.get(str(relative)) or _owner(rootstock, entries, target)
+                    conflicts.append((str(relative), first, entry.ref.key))
                     continue
                 target.symlink_to(relative_link(stem / relative, target))
                 created_links.append(target)
@@ -205,8 +249,7 @@ def graft(rootstock: Rootstock) -> int:
     except ScionError:
         _rollback(created_links, created_dirs)
         raise
-    log.info("greffe : %d feuilles liées dans %s", len(created_links), trunk)
-    return len(created_links)
+    return created_links
 
 
 def _report(conflicts: list[tuple[str, str, str]]) -> str:
