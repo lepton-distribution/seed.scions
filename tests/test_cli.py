@@ -75,6 +75,18 @@ class TestInstall(FixtureCase):
         for relative in INSTALL_LAYOUT:
             self.assertTrue((target / relative).is_dir(), relative)
 
+    def test_bare_install_creates_no_layout(self):
+        target = self.base / "fresh-bare"
+        target.mkdir()
+        code, _, err = run("rootstock-install", "--bare", cwd=target)
+        self.assertEqual(code, 0, err)
+        self.assertTrue((target / SIGNATURE).exists())
+        self.assertTrue((target / "trunk/.scion.grafted.list").exists())
+        self.assertEqual(sorted(p.name for p in target.iterdir()),
+                         sorted([SIGNATURE, "depots", "trunk"]))
+        self.assertEqual(list((target / "depots").iterdir()), [])
+        self.assertEqual(run("rootstock-information", cwd=target)[0], 0)
+
     def test_install_names_the_trunk(self):
         target = self.base / "fresh-named"
         target.mkdir()

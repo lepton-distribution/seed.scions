@@ -73,7 +73,7 @@ def cmd_rootstock_information(args) -> int:
 
 
 def cmd_rootstock_install(args) -> int:
-    rootstock = rootstock_ops.install(Path.cwd(), args.trunk or DEFAULT_TRUNK)
+    rootstock = rootstock_ops.install(Path.cwd(), args.trunk or DEFAULT_TRUNK, bare=args.bare)
     log.info("rootstock installé dans %s (trunk : %s)", rootstock.path, rootstock.trunk_name)
     return 0
 
@@ -230,8 +230,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("version", parents=[common], help="affiche les versions")
     sub.add_parser("rootstock-information", parents=[located],
                    help="affiche le rootstock courant et son trunk")
-    sub.add_parser("rootstock-install", parents=[common],
-                   help="initialise le répertoire courant (vide) en rootstock")
+    install = sub.add_parser("rootstock-install", parents=[common],
+                             help="initialise le répertoire courant (vide) en rootstock")
+    install.add_argument(
+        "--bare", action="store_true",
+        help="ne créer que la signature, depots/ et le trunk, sans les répertoires "
+             "depots/origin et depots/generation",
+    )
 
     add = sub.add_parser("seed-add", parents=[common],
                          help="ajoute un seed au rootstock et cloner ses scions")
