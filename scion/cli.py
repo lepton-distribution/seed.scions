@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from . import __version__, gitops, graft as graft_ops, rootstock as rootstock_ops
+from . import seed as seed_ops
 from .errors import GitError, ScionError
 from .model import read_grafted
 from .rootstock import DEFAULT_TRUNK, HIDDEN_DIR, STEM_DIR
@@ -110,6 +111,19 @@ def cmd_seed_update(args) -> int:
     return 0
 
 
+def cmd_seed_scion_add(args) -> int:
+    seed_ops.add_scion(
+        _seed_dot_scion(args), args.key, args.version, args.location,
+        args.subpath or "", replace=args.replace,
+    )
+    return 0
+
+
+def cmd_seed_scion_remove(args) -> int:
+    seed_ops.remove_scion(_seed_dot_scion(args), args.key)
+    return 0
+
+
 def cmd_graft(args) -> int:
     rootstock = _rootstock(args)
     if args.scions:
@@ -179,6 +193,8 @@ COMMANDS = {
     "seed-add": cmd_seed_add,
     "seed-clone": cmd_seed_clone,
     "seed-update": cmd_seed_update,
+    "seed-scion-add": cmd_seed_scion_add,
+    "seed-scion-remove": cmd_seed_scion_remove,
     "graft": cmd_graft,
     "ungraft": cmd_ungraft,
     "graft-clean": cmd_graft_clean,
@@ -232,6 +248,27 @@ def build_parser() -> argparse.ArgumentParser:
     update = sub.add_parser("seed-update", parents=[located],
                             help="met à jour les clones des scions d'un seed")
     update.add_argument("--seed", default=None, help="chemin du seed")
+
+    scion_add = sub.add_parser(
+        "seed-scion-add", parents=[common],
+        help="déclare un scion dans un seed (sources et ramifications), sans cloner",
+    )
+    scion_add.add_argument("--seed", default=None, help="chemin du seed")
+    scion_add.add_argument(
+        "--replace", action="store_true", help="remplacer le scion s'il est déjà déclaré"
+    )
+    scion_add.add_argument("key", metavar="shelf@prefix::suffix")
+    scion_add.add_argument("version", help="branche, tag, « * » (local) ou « ? »")
+    scion_add.add_argument("location", metavar="emplacement",
+                           help="URL du dépôt, ou chemin local relatif au rootstock")
+    scion_add.add_argument("subpath", nargs="?", default=None, metavar="chemin",
+                           help="chemin du scion dans le dépôt")
+    scion_remove = sub.add_parser(
+        "seed-scion-remove", parents=[common],
+        help="retire un scion d'un seed (sources et ramifications)",
+    )
+    scion_remove.add_argument("--seed", default=None, help="chemin du seed")
+    scion_remove.add_argument("key", metavar="shelf@prefix::suffix")
 
     graft = sub.add_parser("graft", parents=[located],
                            help="greffe sur le trunk tous les scions de la liste greffée")
