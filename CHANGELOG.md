@@ -1,5 +1,44 @@
 # Journal des modifications
 
+## 0.5.1.0
+
+Ajouts compatibles et corrections ; formats de fichiers et commandes
+existantes inchangés.
+
+### Nouveautés
+
+- **`seed-scion-add [--seed S] [--replace] shelf@nom version emplacement
+  [chemin]`** déclare un scion dans un seed : une ligne dans
+  `.scion.sources.list`, une dans `.scion.ramifications`. Un scion déjà déclaré
+  est refusé, sauf `--replace`, qui remplace toutes ses lignes. Ni clone ni
+  greffe : suivent `seed-clone` puis `graft --scion`.
+- **`seed-scion-remove [--seed S] shelf@nom`** retire les lignes du scion des
+  deux fichiers du seed. Commentaires et autres entrées sont conservés tels
+  quels par les deux commandes.
+- **`graft --scion shelf@nom`** (répétable) regreffe un seul scion : ses liens,
+  reconnus par leur cible, sont retirés puis recréés depuis son contenu
+  actuel ; le reste du trunk n'est pas touché. Un conflit annule l'appel et
+  rétablit les anciens liens.
+- **`graft-remove [--purge] [--force] shelf@nom`** retire un scion de la liste
+  greffée et ses seules feuilles du trunk ; les répertoires vidés disparaissent,
+  sauf ceux qu'un autre scion déclare. `--purge` supprime aussi le clone s'il a
+  été fait par scion, qu'aucun autre scion ne l'utilise, qu'il est propre et
+  qu'il n'a aucun commit absent de l'amont ; sinon refus, sans rien modifier.
+- **`rootstock-install --bare`** ne crée que la signature, `depots/` et le
+  trunk, sans `depots/origin` ni `depots/generation`.
+
+### Corrections
+
+- Un répertoire de scion qui rencontre un fichier ou un lien du même nom dans
+  le trunk est un conflit signalé, annulé, code 1. Auparavant : trace Python
+  sans annulation (fichier puis répertoire), ou greffe écrite **dans le clone**
+  d'un autre scion à travers un lien versionné vers un répertoire, avec le
+  code 0.
+- Le message de conflit nomme le scion propriétaire d'un répertoire au lieu de
+  « trunk ».
+- `scion git` affiche la sortie de git (stdout, et stderr complet en échec) ;
+  elle était capturée puis perdue.
+
 ## 0.5.0.1
 
 Réécriture complète. L'outil devient un gestionnaire d'arbre de sources

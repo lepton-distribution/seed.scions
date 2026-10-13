@@ -116,13 +116,21 @@ Depuis une copie du dépôt, `python3 -m scion.cli <commande>` est équivalent �
 ```
 scion version                         affiche les versions
 scion rootstock-information           affiche le rootstock courant et son trunk
-scion rootstock-install [--trunk NOM] initialise le répertoire courant (vide)
+scion rootstock-install [--trunk NOM] [--bare]
+                                      initialise le répertoire courant (vide)
 scion seed-add [--version BRANCHE] [--single-branch] URL|CHEMIN
                                       ajoute un seed et clone ses scions
 scion seed-clone  [--seed CHEMIN] [--single-branch]
                                       clone les scions d'un seed déjà présent
 scion seed-update [--seed CHEMIN]     met à jour les clones d'un seed
-scion graft                           (re)greffe le trunk
+scion seed-scion-add [--seed CHEMIN] [--replace] shelf@prefix::suffix VERSION EMPLACEMENT [CHEMIN]
+                                      déclare un scion dans un seed
+scion seed-scion-remove [--seed CHEMIN] shelf@prefix::suffix
+                                      retire un scion d'un seed
+scion graft [--force] [--scion shelf@prefix::suffix ...]
+                                      (re)greffe le trunk, ou un seul scion
+scion graft-remove [--purge] [--force] shelf@prefix::suffix
+                                      retire un scion du trunk (et son clone)
 scion ungraft [--force]               vide le trunk
 scion graft-clean [--force]           vide le trunk et oublie la liste greffée
 scion graft-update                    met à jour tous les seeds puis regreffe
@@ -130,7 +138,8 @@ scion git --key shelf@prefix::suffix --args "..."
                                       exécute git dans le dépôt d'un scion
 ```
 
-Toutes les commandes acceptent un `rootstock_path` en argument positionnel ; par
+Toutes les commandes qui agissent sur un rootstock acceptent un `rootstock_path`
+en argument positionnel (après la clé pour `graft-remove`) ; par
 défaut l'outil remonte depuis le répertoire courant jusqu'au premier répertoire
 portant `.scion.rootstock.signature`. `--trunk` nomme le trunk lorsqu'il y en a
 plusieurs. `-v` passe le journal en mode détaillé.
@@ -145,8 +154,8 @@ mon-arbre/
 ├── .scion.rootstock.signature     marque le rootstock (fichier vide)
 ├── depots/                        les clones git — jamais modifiés
 │   ├── <shelf>/<prefix>/<version>/    un scion distant
-│   ├── generation/building/           produit par rootstock-install
-│   └── origin/scion/sources/          produit par rootstock-install
+│   ├── generation/building/           produit par rootstock-install (sauf --bare)
+│   └── origin/scion/sources/          produit par rootstock-install (sauf --bare)
 └── trunk/                         l'arbre composé, jetable
     ├── .scion.grafted.list        ce qui est greffé (marque le trunk)
     └── ...                        répertoires réels, fichiers = liens relatifs
@@ -206,6 +215,31 @@ scion graft
 
 Ensuite `scion graft-update` remet à jour tous les dépôts et reconstruit le
 trunk ; `scion ungraft` le vide sans toucher aux clones.
+
+### Faire évoluer un seed
+
+Aucune de ces commandes ne fait de `git pull` ; `seed-scion-*` n'éditent que
+les deux fichiers du seed (à commiter dans son dépôt).
+
+```sh
+# ajouter un scion
+scion seed-scion-add --seed S shelf@nom master https://exemple.org/depot.git
+scion seed-clone --seed S
+scion graft --scion shelf@nom
+
+# retirer un scion (--purge : supprimer aussi son clone)
+scion seed-scion-remove --seed S shelf@nom
+scion graft-remove shelf@nom
+
+# remplacer un scion (autre version ou autre dépôt)
+scion seed-scion-add --seed S --replace shelf@nom v2 https://exemple.org/autre.git
+scion graft-remove shelf@nom
+scion seed-clone --seed S
+scion graft --scion shelf@nom
+```
+
+Après la création ou la suppression d'un fichier dans un clone,
+`scion graft --scion shelf@nom` regreffe ce seul scion.
 
 ### Exemple : arbre Lepton
 
