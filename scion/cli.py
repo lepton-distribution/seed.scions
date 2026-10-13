@@ -112,8 +112,17 @@ def cmd_seed_update(args) -> int:
 
 def cmd_graft(args) -> int:
     rootstock = _rootstock(args)
+    if args.scions:
+        graft_ops.graft_scions(rootstock, args.scions, force=args.force)
+        return 0
     graft_ops.ungraft(rootstock, force=args.force)
     graft_ops.graft(rootstock)
+    return 0
+
+
+def cmd_graft_remove(args) -> int:
+    rootstock = _rootstock(args)
+    graft_ops.remove(rootstock, args.key, purge=args.purge, force=args.force)
     return 0
 
 
@@ -174,6 +183,7 @@ COMMANDS = {
     "ungraft": cmd_ungraft,
     "graft-clean": cmd_graft_clean,
     "graft-update": cmd_graft_update,
+    "graft-remove": cmd_graft_remove,
     "git": cmd_git,
 }
 
@@ -226,6 +236,10 @@ def build_parser() -> argparse.ArgumentParser:
     graft = sub.add_parser("graft", parents=[located],
                            help="greffe sur le trunk tous les scions de la liste greffée")
     _force(graft)
+    graft.add_argument(
+        "--scion", dest="scions", action="append", default=[], metavar="shelf@prefix::suffix",
+        help="ne regreffer que ce scion (répétable) ; le reste du trunk est conservé",
+    )
     ungraft = sub.add_parser("ungraft", parents=[located], help="vide le trunk")
     _force(ungraft)
     clean = sub.add_parser("graft-clean", parents=[located],
@@ -236,6 +250,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="met à jour tous les seeds de la liste greffée puis regreffe",
     )
     _force(graft_update)
+    graft_remove = sub.add_parser(
+        "graft-remove", parents=[common],
+        help="retire un scion du trunk et de la liste greffée",
+    )
+    _force(graft_remove)
+    graft_remove.add_argument(
+        "--purge", action="store_true",
+        help="supprimer aussi son clone (cloné par scion, non partagé, propre, sans commit local)",
+    )
+    graft_remove.add_argument("key", metavar="shelf@prefix::suffix")
+    graft_remove.add_argument("rootstock_path", nargs="?", default=None)
 
     git = sub.add_parser("git", parents=[located],
                          help="exécute une commande git dans le dépôt d'un scion")
