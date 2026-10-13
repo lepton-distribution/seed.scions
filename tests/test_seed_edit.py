@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import unittest
 
 import make_fixture
@@ -99,6 +100,29 @@ class TestSeedScionAdd(SeedCase):
         code, _, err = run("graft", "--scion", "delta@d::x", cwd=self.rootstock)
         self.assertEqual(code, 0, err)
         self.assertTrue((self.trunk / "delta/delta.txt").is_symlink())
+
+    def test_replaced_scion_grafts_from_its_new_origin(self):
+        self.seed_add()
+        self.assertEqual(self.graft()[0], 0)
+        replacement = self.fx.repos / "beta2"
+        make_fixture._write(replacement / "scion/tools/bin/tool2.sh", "two\n")
+        make_fixture._make_repo(replacement)
+        url = make_fixture._url(replacement)
+        steps = [
+            ("seed-scion-add", "--seed", str(self.fx.seed), "--replace",
+             "beta@tools::bin", "v2", url),
+            ("graft-remove", "beta@tools::bin"),
+            ("seed-clone", "--seed", str(self.fx.seed)),
+            ("graft", "--scion", "beta@tools::bin"),
+        ]
+        subprocess.run(["git", "branch", "-q", "v2"], cwd=replacement, check=True)
+        for argv in steps:
+            code, _, err = run(*argv, cwd=self.rootstock)
+            self.assertEqual(code, 0, f"{argv}: {err}")
+        self.assertTrue((self.trunk / "tools/bin/tool2.sh").is_symlink())
+        self.assertFalse(os.path.lexists(self.trunk / "tools/bin/tool.sh"))
+        self.assertIn("depots/beta/tools/v2",
+                      read_grafted(self.trunk / ".scion.grafted.list")["beta/tools::bin"].local_path)
 
 
 class TestSeedScionRemove(SeedCase):
