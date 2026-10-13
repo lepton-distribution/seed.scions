@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 
 from . import __version__, gitops, graft as graft_ops, rootstock as rootstock_ops
-from .errors import ScionError
+from . import seed as seed_ops
+from .errors import GitError, ScionError
 from .model import read_grafted
 from .rootstock import DEFAULT_TRUNK, HIDDEN_DIR, STEM_DIR
 
@@ -72,7 +73,7 @@ def cmd_rootstock_information(args) -> int:
 
 
 def cmd_rootstock_install(args) -> int:
-    rootstock = rootstock_ops.install(Path.cwd(), args.trunk or DEFAULT_TRUNK)
+    rootstock = rootstock_ops.install(Path.cwd(), args.trunk or DEFAULT_TRUNK, bare=args.bare)
     log.info("rootstock installé dans %s (trunk : %s)", rootstock.path, rootstock.trunk_name)
     return 0
 
@@ -110,10 +111,32 @@ def cmd_seed_update(args) -> int:
     return 0
 
 
+def cmd_seed_scion_add(args) -> int:
+    seed_ops.add_scion(
+        _seed_dot_scion(args), args.key, args.version, args.location,
+        args.subpath or "", replace=args.replace,
+    )
+    return 0
+
+
+def cmd_seed_scion_remove(args) -> int:
+    seed_ops.remove_scion(_seed_dot_scion(args), args.key)
+    return 0
+
+
 def cmd_graft(args) -> int:
     rootstock = _rootstock(args)
+    if args.scions:
+        graft_ops.graft_scions(rootstock, args.scions, force=args.force)
+        return 0
     graft_ops.ungraft(rootstock, force=args.force)
     graft_ops.graft(rootstock)
+    return 0
+
+
+def cmd_graft_remove(args) -> int:
+    rootstock = _rootstock(args)
+    graft_ops.remove(rootstock, args.key, purge=args.purge, force=args.force)
     return 0
 
 
@@ -144,8 +167,23 @@ def cmd_git(args) -> int:
     entry = read_grafted(rootstock.grafted_list).get(key)
     if entry is None:
         raise ScionError(f"scion « {args.key} » absent de {rootstock.grafted_list}")
-    gitops.run(shlex.split(args.args), cwd=rootstock.resolve(entry.local_path))
+    try:
+        out, err = gitops.run_verbatim(
+            shlex.split(args.args), cwd=rootstock.resolve(entry.local_path)
+        )
+    except GitError as exc:
+        _echo(exc.stdout, exc.stderr)
+        raise
+    _echo(out, err)
     return 0
+
+
+def _echo(out: str, err: str) -> None:
+    """Hand git's output over unchanged."""
+    if out:
+        print(out, end="")
+    if err:
+        print(err, end="", file=sys.stderr)
 
 
 COMMANDS = {
@@ -155,10 +193,13 @@ COMMANDS = {
     "seed-add": cmd_seed_add,
     "seed-clone": cmd_seed_clone,
     "seed-update": cmd_seed_update,
+    "seed-scion-add": cmd_seed_scion_add,
+    "seed-scion-remove": cmd_seed_scion_remove,
     "graft": cmd_graft,
     "ungraft": cmd_ungraft,
     "graft-clean": cmd_graft_clean,
     "graft-update": cmd_graft_update,
+    "graft-remove": cmd_graft_remove,
     "git": cmd_git,
 }
 
@@ -189,8 +230,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("version", parents=[common], help="affiche les versions")
     sub.add_parser("rootstock-information", parents=[located],
                    help="affiche le rootstock courant et son trunk")
-    sub.add_parser("rootstock-install", parents=[common],
-                   help="initialise le répertoire courant (vide) en rootstock")
+    install = sub.add_parser("rootstock-install", parents=[common],
+                             help="initialise le répertoire courant (vide) en rootstock")
+    install.add_argument(
+        "--bare", action="store_true",
+        help="ne créer que la signature, depots/ et le trunk, sans les répertoires "
+             "depots/origin et depots/generation",
+    )
 
     add = sub.add_parser("seed-add", parents=[common],
                          help="ajoute un seed au rootstock et cloner ses scions")
@@ -208,9 +254,34 @@ def build_parser() -> argparse.ArgumentParser:
                             help="met à jour les clones des scions d'un seed")
     update.add_argument("--seed", default=None, help="chemin du seed")
 
+    scion_add = sub.add_parser(
+        "seed-scion-add", parents=[common],
+        help="déclare un scion dans un seed (sources et ramifications), sans cloner",
+    )
+    scion_add.add_argument("--seed", default=None, help="chemin du seed")
+    scion_add.add_argument(
+        "--replace", action="store_true", help="remplacer le scion s'il est déjà déclaré"
+    )
+    scion_add.add_argument("key", metavar="shelf@prefix::suffix")
+    scion_add.add_argument("version", help="branche, tag, « * » (local) ou « ? »")
+    scion_add.add_argument("location", metavar="emplacement",
+                           help="URL du dépôt, ou chemin local relatif au rootstock")
+    scion_add.add_argument("subpath", nargs="?", default=None, metavar="chemin",
+                           help="chemin du scion dans le dépôt")
+    scion_remove = sub.add_parser(
+        "seed-scion-remove", parents=[common],
+        help="retire un scion d'un seed (sources et ramifications)",
+    )
+    scion_remove.add_argument("--seed", default=None, help="chemin du seed")
+    scion_remove.add_argument("key", metavar="shelf@prefix::suffix")
+
     graft = sub.add_parser("graft", parents=[located],
                            help="greffe sur le trunk tous les scions de la liste greffée")
     _force(graft)
+    graft.add_argument(
+        "--scion", dest="scions", action="append", default=[], metavar="shelf@prefix::suffix",
+        help="ne regreffer que ce scion (répétable) ; le reste du trunk est conservé",
+    )
     ungraft = sub.add_parser("ungraft", parents=[located], help="vide le trunk")
     _force(ungraft)
     clean = sub.add_parser("graft-clean", parents=[located],
@@ -221,6 +292,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="met à jour tous les seeds de la liste greffée puis regreffe",
     )
     _force(graft_update)
+    graft_remove = sub.add_parser(
+        "graft-remove", parents=[common],
+        help="retire un scion du trunk et de la liste greffée",
+    )
+    _force(graft_remove)
+    graft_remove.add_argument(
+        "--purge", action="store_true",
+        help="supprimer aussi son clone (cloné par scion, non partagé, propre, sans commit local)",
+    )
+    graft_remove.add_argument("key", metavar="shelf@prefix::suffix")
+    graft_remove.add_argument("rootstock_path", nargs="?", default=None)
 
     git = sub.add_parser("git", parents=[located],
                          help="exécute une commande git dans le dépôt d'un scion")

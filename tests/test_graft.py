@@ -121,6 +121,56 @@ class TestConflicts(FixtureCase):
         self.assertFalse((self.trunk / "sys/root/src/kernel/core/kernel.c").exists())
 
 
+class TestFileDirectoryConflicts(FixtureCase):
+    """A file, a link and a directory competing for the same trunk path."""
+
+    def graft_pair(self, make_a, make_b) -> tuple[int, str, str]:
+        depots = self.rootstock / "depots"
+        make_a(depots / "a/scion")
+        make_b(depots / "b/scion")
+        seed = self.base / "seed-pair/scion/.scion"
+        seed.mkdir(parents=True)
+        (seed / ".scion.sources.list").write_text("t a * depots/a\nt b * depots/b\n")
+        (seed / ".scion.ramifications").write_text("t a *\nt b *\n")
+        code, _, err = run("seed-clone", "--seed", str(seed.parent), cwd=self.rootstock)
+        self.assertEqual(code, 0, err)
+        return self.graft()
+
+    @staticmethod
+    def file_x(stem: Path) -> None:
+        stem.mkdir(parents=True)
+        (stem / "X").write_text("file\n")
+
+    @staticmethod
+    def directory_x(stem: Path) -> None:
+        (stem / "X").mkdir(parents=True)
+        (stem / "X/y").write_text("y\n")
+
+    @staticmethod
+    def link_x(stem: Path) -> None:
+        (stem / "d").mkdir(parents=True)
+        (stem / "X").symlink_to("d")
+
+    def assert_clean_failure(self, code: int, err: str) -> None:
+        self.assertEqual(code, 1, err)
+        self.assertIn("X : déjà fourni par « t/a », réclamé par « t/b »", err)
+        left = [p for p in self.trunk.rglob("*") if p.name != ".scion.grafted.list"]
+        self.assertEqual(left, [])
+
+    def test_file_then_directory(self):
+        code, _, err = self.graft_pair(self.file_x, self.directory_x)
+        self.assert_clean_failure(code, err)
+
+    def test_versioned_link_then_directory_never_writes_in_a_clone(self):
+        code, _, err = self.graft_pair(self.link_x, self.directory_x)
+        self.assert_clean_failure(code, err)
+        self.assertEqual(os.listdir(self.rootstock / "depots/a/scion/d"), [])
+
+    def test_directory_then_file_names_its_owner(self):
+        code, _, err = self.graft_pair(self.directory_x, self.file_x)
+        self.assert_clean_failure(code, err)
+
+
 class TestUngraft(FixtureCase):
     def setUp(self):
         super().setUp()

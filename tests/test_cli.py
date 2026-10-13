@@ -14,7 +14,7 @@ class TestVersion(unittest.TestCase):
         code, out, _ = run("version")
         self.assertEqual(code, 0)
         self.assertIn(__version__, out)
-        self.assertEqual(__version__, "0.5.0.1")
+        self.assertEqual(__version__, "0.5.1.0")
 
     def test_no_command_prints_help(self):
         code, out, _ = run()
@@ -75,6 +75,18 @@ class TestInstall(FixtureCase):
         for relative in INSTALL_LAYOUT:
             self.assertTrue((target / relative).is_dir(), relative)
 
+    def test_bare_install_creates_no_layout(self):
+        target = self.base / "fresh-bare"
+        target.mkdir()
+        code, _, err = run("rootstock-install", "--bare", cwd=target)
+        self.assertEqual(code, 0, err)
+        self.assertTrue((target / SIGNATURE).exists())
+        self.assertTrue((target / "trunk/.scion.grafted.list").exists())
+        self.assertEqual(sorted(p.name for p in target.iterdir()),
+                         sorted([SIGNATURE, "depots", "trunk"]))
+        self.assertEqual(list((target / "depots").iterdir()), [])
+        self.assertEqual(run("rootstock-information", cwd=target)[0], 0)
+
     def test_install_names_the_trunk(self):
         target = self.base / "fresh-named"
         target.mkdir()
@@ -126,6 +138,25 @@ class TestGitCommand(FixtureCase):
             "--args", "log -1 --format=%s", cwd=self.rootstock,
         )
         self.assertEqual(code, 0, err)
+
+    def test_output_is_shown(self):
+        code, out, err = run(
+            "git", "--key", "alpha@core::kernel",
+            "--args", "log -1 --format=%s", cwd=self.rootstock,
+        )
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, "fixture\n")
+
+    def test_git_error_output_is_shown_in_full(self):
+        code, _, err = run(
+            "git", "--key", "alpha@core::kernel", "--args", "frobnicate --now",
+            cwd=self.rootstock,
+        )
+        self.assertEqual(code, 2)
+        # git's own message (wording depends on its locale) precedes scion's
+        self.assertIn("échec de « git frobnicate --now »", err)
+        self.assertGreater(err.index("échec de"), 0)
+        self.assertIn("frobnicate", err[: err.index("échec de")])
 
 
 class TestSeedOptions(FixtureCase):

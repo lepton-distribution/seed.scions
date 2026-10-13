@@ -152,6 +152,34 @@ def write_grafted(path: Path, entries) -> None:
     Path(path).write_text("".join(e.serialize() + "\n" for e in entries))
 
 
+def rewrite_key(path: Path, key: str, minimum: int, new_line: str | None = None) -> int:
+    """Drop the entries of ``key`` from a seed file, then append ``new_line``.
+
+    Comments, blank lines, short lines and every other entry are kept verbatim.
+    A missing file is created when there is a line to write. Returns the number
+    of entries dropped.
+    """
+    path = Path(path)
+    try:
+        text = path.read_text() if path.exists() or new_line is None else ""
+    except OSError as exc:
+        raise ScionError(f"fichier illisible : {path} ({exc.strerror})") from exc
+    kept: list[str] = []
+    dropped = 0
+    for line in text.splitlines(keepends=True):
+        f = fields(line)
+        if len(f) >= minimum and ScionRef.parse(f[0], f[1], f[2]).key == key:
+            dropped += 1
+            continue
+        kept.append(line)
+    if new_line is not None:
+        if kept and not kept[-1].endswith("\n"):
+            kept[-1] += "\n"
+        kept.append(new_line + "\n")
+    path.write_text("".join(kept))
+    return dropped
+
+
 def select_source(sources: list[SourceEntry], ref: ScionRef) -> SourceEntry:
     """Pick the source line a ramification entry refers to.
 

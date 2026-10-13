@@ -114,15 +114,20 @@ def find_trunk(path: Path) -> str:
     return candidates[0]
 
 
-def install(path: Path, trunk_name: str = DEFAULT_TRUNK) -> Rootstock:
-    """Lay out an empty directory as a rootstock."""
+def install(path: Path, trunk_name: str = DEFAULT_TRUNK, bare: bool = False) -> Rootstock:
+    """Lay out an empty directory as a rootstock.
+
+    ``bare`` leaves out :data:`INSTALL_LAYOUT`: only the signature, ``depots/``
+    and the trunk are created.
+    """
     path = Path(path).resolve()
     if any(path.iterdir()):
         raise ScionError(f"le répertoire d'installation {path} n'est pas vide")
     (path / SIGNATURE).touch()
     (path / trunk_name).mkdir()
     (path / trunk_name / GRAFTED_LIST).touch()
-    for relative in INSTALL_LAYOUT:
+    (path / DEPOTS_DIR).mkdir()
+    for relative in () if bare else INSTALL_LAYOUT:
         (path / relative).mkdir(parents=True, exist_ok=True)
     return Rootstock(path, trunk_name)
 
