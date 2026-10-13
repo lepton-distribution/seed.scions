@@ -17,9 +17,25 @@ def run(args: list[str], cwd: Path | None = None) -> str:
     Git's own output is captured rather than let through: it would interleave
     with the tool's logging, and on failure it is what the error message needs.
     """
+    completed = _run(args, cwd)
+    if completed.stderr:
+        log.debug("%s", completed.stderr.rstrip())
+    return completed.stdout
+
+
+def run_verbatim(args: list[str], cwd: Path | None = None) -> tuple[str, str]:
+    """Run one git command whose output is the point; return ``(stdout, stderr)``.
+
+    On failure, both streams are carried by the :class:`GitError`.
+    """
+    completed = _run(args, cwd)
+    return completed.stdout, completed.stderr
+
+
+def _run(args: list[str], cwd: Path | None) -> subprocess.CompletedProcess:
     log.debug("git %s (cwd=%s)", " ".join(args), cwd)
     try:
-        completed = subprocess.run(
+        return subprocess.run(
             ["git", *args],
             cwd=str(cwd) if cwd else None,
             check=True,
@@ -33,11 +49,10 @@ def run(args: list[str], cwd: Path | None = None) -> str:
         detail = (exc.stderr or "").strip().splitlines()
         raise GitError(
             f"échec de « git {' '.join(args)} » (code {exc.returncode})"
-            + (f" : {detail[-1]}" if detail else "")
+            + (f" : {detail[-1]}" if detail else ""),
+            stdout=exc.stdout or "",
+            stderr=exc.stderr or "",
         ) from exc
-    if completed.stderr:
-        log.debug("%s", completed.stderr.rstrip())
-    return completed.stdout
 
 
 def clone(url: str, dest: Path, version: str = "master", single_branch: bool = False) -> None:

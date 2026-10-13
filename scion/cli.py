@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from . import __version__, gitops, graft as graft_ops, rootstock as rootstock_ops
-from .errors import ScionError
+from .errors import GitError, ScionError
 from .model import read_grafted
 from .rootstock import DEFAULT_TRUNK, HIDDEN_DIR, STEM_DIR
 
@@ -144,8 +144,23 @@ def cmd_git(args) -> int:
     entry = read_grafted(rootstock.grafted_list).get(key)
     if entry is None:
         raise ScionError(f"scion « {args.key} » absent de {rootstock.grafted_list}")
-    gitops.run(shlex.split(args.args), cwd=rootstock.resolve(entry.local_path))
+    try:
+        out, err = gitops.run_verbatim(
+            shlex.split(args.args), cwd=rootstock.resolve(entry.local_path)
+        )
+    except GitError as exc:
+        _echo(exc.stdout, exc.stderr)
+        raise
+    _echo(out, err)
     return 0
+
+
+def _echo(out: str, err: str) -> None:
+    """Hand git's output over unchanged."""
+    if out:
+        print(out, end="")
+    if err:
+        print(err, end="", file=sys.stderr)
 
 
 COMMANDS = {

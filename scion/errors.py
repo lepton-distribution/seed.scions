@@ -14,6 +14,11 @@ class ScionError(Exception):
 
 
 class GitError(ScionError):
-    """A git invocation failed."""
+    """A git invocation failed; git's own output travels with it."""
 
     exit_code = 2
+
+    def __init__(self, message: str, stdout: str = "", stderr: str = "") -> None:
+        super().__init__(message)
+        self.stdout = stdout
+        self.stderr = stderr
