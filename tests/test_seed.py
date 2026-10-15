@@ -120,7 +120,7 @@ class TestCloneVersion(FixtureCase):
         alpha = self.fx.repos / "alpha"
         self.git(alpha, "branch", "-q", "-m", "master", "main")
         code, _, err = run("seed-add", str(self.fx.seed), cwd=self.rootstock)
-        self.assertNotEqual(code, 0)
+        self.assertEqual(code, 2, err)
         self.assertIn("checkout master", err)
 
 
