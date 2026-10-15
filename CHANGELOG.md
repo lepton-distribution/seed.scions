@@ -1,5 +1,17 @@
 # Journal des modifications
 
+## 0.5.1.1
+
+Correction ; formats de fichiers et commandes inchangés.
+
+### Corrections
+
+- Un scion distant de version `master` est cloné puis extrait sur `master`.
+  Auparavant, sans `--single-branch`, le clone restait sur la branche pointée
+  par le `HEAD` de l'origine, qui peut être une autre branche (`main`, branche
+  de travail). Une version déclarée absente de l'origine fait désormais échouer
+  la commande (code 2) au lieu de donner un clone sur une autre branche.
+
 ## 0.5.1.0
 
 Ajouts compatibles et corrections ; formats de fichiers et commandes

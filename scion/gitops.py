@@ -60,15 +60,16 @@ def clone(url: str, dest: Path, version: str = "master", single_branch: bool = F
 
     Without ``single_branch`` the whole repository is cloned and then checked
     out, which keeps the other branches available locally; with it, only the
-    requested branch is fetched.
+    requested branch is fetched. The checkout is never skipped, ``master``
+    included: the branch the origin's ``HEAD`` points to need not be the
+    declared version, and a version the origin lacks is an error.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
     if single_branch:
         run(["clone", "-b", version, "--single-branch", url, str(dest)])
         return
     run(["clone", url, str(dest)])
-    if version != "master":
-        run(["checkout", version], cwd=dest)
+    run(["checkout", version], cwd=dest)
 
 
 def pull(dest: Path) -> None:
