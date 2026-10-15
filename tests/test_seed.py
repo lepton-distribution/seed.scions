@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import unittest
 
 from support import DATA, FixtureCase, run
@@ -93,6 +94,34 @@ class TestSeedOnRootstock(FixtureCase):
         code, _, err = run("seed-add", str(self.fx.seed), cwd=self.rootstock)
         self.assertEqual(code, 1)
         self.assertIn("variables d'environnement", err)
+
+
+class TestCloneVersion(FixtureCase):
+    """The clone is put on the declared version, not on the origin's HEAD."""
+
+    @staticmethod
+    def git(repo, *args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    def test_declared_master_is_checked_out_whatever_the_origin_head(self):
+        alpha = self.fx.repos / "alpha"
+        self.git(alpha, "checkout", "-q", "-b", "other")
+        self.git(alpha, "commit", "-q", "--allow-empty", "-m", "other")
+        self.seed_add()
+        clone = self.fx.depots / "alpha/core/master"
+        self.assertEqual(self.git(clone, "branch", "--show-current"), "master")
+        self.assertEqual(
+            self.git(clone, "rev-parse", "HEAD"), self.git(alpha, "rev-parse", "master")
+        )
+
+    def test_declared_version_missing_from_the_origin_is_an_error(self):
+        alpha = self.fx.repos / "alpha"
+        self.git(alpha, "branch", "-q", "-m", "master", "main")
+        code, _, err = run("seed-add", str(self.fx.seed), cwd=self.rootstock)
+        self.assertNotEqual(code, 0)
+        self.assertIn("checkout master", err)
 
 
 if __name__ == "__main__":
