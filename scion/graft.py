@@ -7,6 +7,7 @@ clone, and a moved rootstock keeps working without re-grafting.
 
 from __future__ import annotations
 
+import fnmatch
 import logging
 import os
 import shutil
@@ -290,11 +291,14 @@ def ungraft(rootstock: Rootstock, force: bool = False) -> None:
 
     A regular file in the trunk is user data, not a graft: it stops the ungraft
     unless ``force`` is given, in which case it is kept and everything else goes.
+    A file the rootstock tolerates is not user data: it goes with the rest.
     """
     trunk = rootstock.trunk
     if not trunk.is_dir():
         return
-    _check_stray(trunk, force)
+    for path in _check_stray(rootstock, force):
+        path.unlink()
+        log.debug("supprimé (toléré) : %s", path.relative_to(trunk))
     for dirpath, dirnames, filenames in os.walk(trunk, topdown=False, followlinks=False):
         for name in filenames + dirnames:
             path = Path(dirpath) / name
@@ -307,21 +311,58 @@ def ungraft(rootstock: Rootstock, force: bool = False) -> None:
                     pass
 
 
-def _check_stray(trunk: Path, force: bool) -> None:
-    stray = [
-        Path(dirpath) / name
-        for dirpath, _, filenames in os.walk(trunk, followlinks=False)
-        for name in filenames
-        if not (Path(dirpath) / name).is_symlink()
-        and not (Path(dirpath) == trunk and name == GRAFTED_LIST)
-    ]
+def _check_stray(rootstock: Rootstock, force: bool) -> list[Path]:
+    """Stop on a regular file of the trunk, unless ``force`` is given.
+
+    Files the rootstock tolerates never stop anything: they are returned, for
+    the caller to remove.
+    """
+    trunk = rootstock.trunk
+    patterns = _tolerated_patterns(rootstock)
+    stray: list[Path] = []
+    tolerated: list[Path] = []
+    for dirpath, _, filenames in os.walk(trunk, followlinks=False):
+        for name in filenames:
+            path = Path(dirpath) / name
+            if path.is_symlink() or (Path(dirpath) == trunk and name == GRAFTED_LIST):
+                continue
+            (tolerated if _is_tolerated(name, patterns) else stray).append(path)
     if stray and not force:
         listing = "\n".join(f"  {path.relative_to(trunk)}" for path in stray)
         raise ScionError(
             f"le trunk {trunk} contient des fichiers qui ne sont pas des greffes :\n"
-            f"{listing}\nDéplacez-les, ou utilisez --force pour les conserver et "
-            "dégreffer le reste"
+            f"{listing}\nDéplacez-les, déclarez leur motif dans {rootstock.tolerated}, "
+            "ou utilisez --force pour les conserver et dégreffer le reste"
         )
+    return tolerated
+
+
+def _tolerated_patterns(rootstock: Rootstock) -> list[str]:
+    """The patterns of the rootstock's tolerated file; none when it is absent."""
+    try:
+        text = rootstock.tolerated.read_text()
+    except FileNotFoundError:
+        return []
+    lines = (line.strip() for line in text.splitlines())
+    return [line for line in lines if line and not line.startswith("#")]
+
+
+def _is_tolerated(name: str, patterns: list[str]) -> bool:
+    return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
+
+
+def _drop_tolerated(directory: Path, patterns: list[str]) -> None:
+    """Remove the tolerated files of ``directory`` when they are all it holds."""
+    try:
+        children = list(directory.iterdir())
+    except OSError:
+        return
+    if not all(child.is_file() and not child.is_symlink()
+               and _is_tolerated(child.name, patterns) for child in children):
+        return
+    for child in children:
+        child.unlink()
+        log.debug("supprimé (toléré) : %s", child)
 
 
 # --------------------------------------------------------------------------
@@ -367,10 +408,12 @@ def _restore(removed: list[tuple[Path, str]]) -> None:
 def _prune(rootstock: Rootstock, candidates, providers) -> None:
     """Remove the candidate directories left empty that no provider grafts.
 
-    A directory a remaining scion declares -- even an empty one -- stays.
+    A directory a remaining scion declares -- even an empty one -- stays; one
+    holding nothing but tolerated files goes, and so do they.
     """
     trunk = rootstock.trunk
     stems = [_stem(rootstock, entry) for entry in providers]
+    patterns = _tolerated_patterns(rootstock)
     every: set[Path] = set()
     for directory in candidates:
         while directory != trunk and trunk in directory.parents:
@@ -380,6 +423,7 @@ def _prune(rootstock: Rootstock, candidates, providers) -> None:
         relative = directory.relative_to(trunk)
         if any((stem / relative).is_dir() for stem in stems):
             continue
+        _drop_tolerated(directory, patterns)
         try:
             directory.rmdir()
         except OSError:
@@ -395,7 +439,7 @@ def graft_scions(rootstock: Rootstock, keys: list[str], force: bool = False) -> 
     entries = read_grafted(rootstock.grafted_list)
     chosen = [_entry(entries, key) for key in keys]
     rootstock.trunk.mkdir(parents=True, exist_ok=True)
-    _check_stray(rootstock.trunk, force)
+    _check_stray(rootstock, force)
     removed = _unlink(rootstock, chosen)
     try:
         links = _graft_entries(rootstock, chosen, entries)
@@ -416,7 +460,7 @@ def remove(rootstock: Rootstock, key: str, purge: bool = False, force: bool = Fa
     entries = read_grafted(rootstock.grafted_list)
     entry = _entry(entries, key)
     clone = _purgeable_clone(rootstock, entry, entries) if purge else None
-    _check_stray(rootstock.trunk, force)
+    _check_stray(rootstock, force)
 
     removed = _unlink(rootstock, [entry])
     del entries[entry.ref.key]

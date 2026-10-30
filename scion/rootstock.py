@@ -15,10 +15,19 @@ from .errors import ScionError
 from .model import GRAFTED_LIST
 
 SIGNATURE = ".scion.rootstock.signature"
+TOLERATED = ".scion.trunk.tolerated"
 DEPOTS_DIR = "depots"
 STEM_DIR = "scion"
 HIDDEN_DIR = ".scion"
 DEFAULT_TRUNK = "trunk"
+
+#: written by ``rootstock-install``: no pattern yet, only how to add one.
+TOLERATED_HEADER = """\
+# Fichiers réguliers tolérés dans le trunk : un motif fnmatch par ligne,
+# appliqué au nom du fichier. Un fichier toléré ne bloque pas le dégreffage
+# et disparaît avec lui. Exemple :
+# *.tmp
+"""
 
 #: created by ``rootstock-install``; the seeds refer to these by relative path.
 INSTALL_LAYOUT = (
@@ -45,6 +54,10 @@ class Rootstock:
     @property
     def grafted_list(self) -> Path:
         return self.trunk / GRAFTED_LIST
+
+    @property
+    def tolerated(self) -> Path:
+        return self.path / TOLERATED
 
     def resolve(self, location: str) -> Path:
         """Turn a local path from a seed or from the grafted list into a real one."""
@@ -117,8 +130,8 @@ def find_trunk(path: Path) -> str:
 def install(path: Path, trunk_name: str = DEFAULT_TRUNK, bare: bool = False) -> Rootstock:
     """Lay out an empty directory as a rootstock.
 
-    ``bare`` leaves out :data:`INSTALL_LAYOUT`: only the signature, ``depots/``
-    and the trunk are created.
+    ``bare`` leaves out :data:`INSTALL_LAYOUT` and :data:`TOLERATED`: only the
+    signature, ``depots/`` and the trunk are created.
     """
     path = Path(path).resolve()
     if any(path.iterdir()):
@@ -129,6 +142,8 @@ def install(path: Path, trunk_name: str = DEFAULT_TRUNK, bare: bool = False) -> 
     (path / DEPOTS_DIR).mkdir()
     for relative in () if bare else INSTALL_LAYOUT:
         (path / relative).mkdir(parents=True, exist_ok=True)
+    if not bare:
+        (path / TOLERATED).write_text(TOLERATED_HEADER)
     return Rootstock(path, trunk_name)
 
 
