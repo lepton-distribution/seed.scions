@@ -78,3 +78,26 @@ def pull(dest: Path) -> None:
 
 def status_porcelain(dest: Path) -> str:
     return run(["status", "--porcelain"], cwd=dest)
+
+
+def toplevel(path: Path) -> Path | None:
+    """The work tree holding ``path``; ``None`` outside git, or without git."""
+    try:
+        return Path(run(["rev-parse", "--show-toplevel"], cwd=path).strip())
+    except GitError:
+        return None
+
+
+def ignored(path: Path) -> list[str]:
+    """The untracked paths under ``path`` that git ignores, relative to it.
+
+    The rules are git's own: ``.gitignore`` files, ``.git/info/exclude`` and
+    ``core.excludesFile``. A directory ignored as a whole comes once, with a
+    trailing ``/``; a tracked file is never listed, whatever the rules say.
+    """
+    out = run(
+        ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory",
+         "-z", "--", "."],
+        cwd=path,
+    )
+    return [name for name in out.split("\0") if name]

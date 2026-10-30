@@ -124,22 +124,42 @@ def clean(rootstock: Rootstock) -> None:
 # --------------------------------------------------------------------------
 # grafted list -> trunk
 # --------------------------------------------------------------------------
-def _walk(base: Path):
+def _walk(base: Path, ignored: frozenset[Path] | set[Path] = frozenset()):
     """Yield ``("dir"|"leaf", path relative to base)`` for a scion.
 
     ``.scion/`` is skipped at every level, and a symlink committed in the
     repository is a leaf even when it points at a directory: it is copied as a
-    link, never followed.
+    link, never followed. A path in ``ignored`` is skipped, and so is
+    everything below it.
     """
     for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
         here = Path(dirpath)
+        relative = here.relative_to(base)
         linked = [name for name in dirnames if (here / name).is_symlink()]
         dirnames[:] = sorted(
-            name for name in dirnames if name != HIDDEN_DIR and name not in linked
+            name for name in dirnames
+            if name != HIDDEN_DIR and name not in linked and relative / name not in ignored
         )
-        yield "dir", here.relative_to(base)
+        yield "dir", relative
         for name in sorted(filenames) + sorted(linked):
-            yield "leaf", (here / name).relative_to(base)
+            if relative / name not in ignored:
+                yield "leaf", relative / name
+
+
+def _ignored(rootstock: Rootstock, entry: GraftedEntry, stem: Path) -> set[Path]:
+    """What git ignores under ``stem``, relative to it: never grafted.
+
+    A scion outside git ignores nothing; neither does one whose work tree holds
+    the rootstock itself, since those rules belong to the rootstock's own
+    repository, not to the scion.
+    """
+    top = gitops.toplevel(stem)
+    if top is None or _inside(rootstock.path.resolve(), top.resolve()):
+        return set()
+    ignored = {Path(name.rstrip("/")) for name in gitops.ignored(stem)}
+    for relative in sorted(ignored):
+        log.debug("exclu (ignoré par git) : %s %s", entry.ref.key, relative)
+    return ignored
 
 
 def _mkdir(path: Path, created: list[Path]) -> None:
@@ -219,13 +239,16 @@ def _graft_entries(rootstock: Rootstock, chosen: list[GraftedEntry], entries) ->
     created_links: list[Path] = []
     owners: dict[str, str] = {}
     conflicts: list[tuple[str, str, str]] = []
+    excluded = 0
     try:
         for entry in chosen:
             stem = _stem(rootstock, entry)
             if not stem.is_dir():
                 raise ScionError(f"scion « {entry.ref.key} » : {stem} est absent")
+            ignored = _ignored(rootstock, entry, stem)
+            excluded += len(ignored)
             blocked: list[Path] = []
-            for kind, relative in _walk(stem):
+            for kind, relative in _walk(stem, ignored):
                 if any(_within(relative, top) for top in blocked):
                     continue
                 target = trunk / relative
@@ -250,6 +273,8 @@ def _graft_entries(rootstock: Rootstock, chosen: list[GraftedEntry], entries) ->
     except ScionError:
         _rollback(created_links, created_dirs)
         raise
+    if excluded:
+        log.info("greffe : %d chemin(s) ignoré(s) par git, non greffé(s) (détail avec -v)", excluded)
     return created_links
 
 
@@ -398,8 +423,9 @@ def remove(rootstock: Rootstock, key: str, purge: bool = False, force: bool = Fa
     candidates = [path.parent for path, _ in removed]
     stem = _stem(rootstock, entry)
     if stem.is_dir():
+        ignored = _ignored(rootstock, entry, stem)
         candidates += [rootstock.trunk / relative
-                       for kind, relative in _walk(stem) if kind == "dir"]
+                       for kind, relative in _walk(stem, ignored) if kind == "dir"]
     _prune(rootstock, candidates, entries.values())
     write_grafted(rootstock.grafted_list, entries.values())
     log.info("scion %s retiré : %d feuilles", entry.ref.key, len(removed))
