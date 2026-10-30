@@ -7,6 +7,7 @@ clone, and a moved rootstock keeps working without re-grafting.
 
 from __future__ import annotations
 
+import fnmatch
 import logging
 import os
 import shutil
@@ -124,22 +125,42 @@ def clean(rootstock: Rootstock) -> None:
 # --------------------------------------------------------------------------
 # grafted list -> trunk
 # --------------------------------------------------------------------------
-def _walk(base: Path):
+def _walk(base: Path, ignored: frozenset[Path] | set[Path] = frozenset()):
     """Yield ``("dir"|"leaf", path relative to base)`` for a scion.
 
     ``.scion/`` is skipped at every level, and a symlink committed in the
     repository is a leaf even when it points at a directory: it is copied as a
-    link, never followed.
+    link, never followed. A path in ``ignored`` is skipped, and so is
+    everything below it.
     """
     for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
         here = Path(dirpath)
+        relative = here.relative_to(base)
         linked = [name for name in dirnames if (here / name).is_symlink()]
         dirnames[:] = sorted(
-            name for name in dirnames if name != HIDDEN_DIR and name not in linked
+            name for name in dirnames
+            if name != HIDDEN_DIR and name not in linked and relative / name not in ignored
         )
-        yield "dir", here.relative_to(base)
+        yield "dir", relative
         for name in sorted(filenames) + sorted(linked):
-            yield "leaf", (here / name).relative_to(base)
+            if relative / name not in ignored:
+                yield "leaf", relative / name
+
+
+def _ignored(rootstock: Rootstock, entry: GraftedEntry, stem: Path) -> set[Path]:
+    """What git ignores under ``stem``, relative to it: never grafted.
+
+    A scion outside git ignores nothing; neither does one whose work tree holds
+    the rootstock itself, since those rules belong to the rootstock's own
+    repository, not to the scion.
+    """
+    top = gitops.toplevel(stem)
+    if top is None or _inside(rootstock.path.resolve(), top.resolve()):
+        return set()
+    ignored = {Path(name.rstrip("/")) for name in gitops.ignored(stem)}
+    for relative in sorted(ignored):
+        log.debug("exclu (ignoré par git) : %s %s", entry.ref.key, relative)
+    return ignored
 
 
 def _mkdir(path: Path, created: list[Path]) -> None:
@@ -219,13 +240,16 @@ def _graft_entries(rootstock: Rootstock, chosen: list[GraftedEntry], entries) ->
     created_links: list[Path] = []
     owners: dict[str, str] = {}
     conflicts: list[tuple[str, str, str]] = []
+    excluded = 0
     try:
         for entry in chosen:
             stem = _stem(rootstock, entry)
             if not stem.is_dir():
                 raise ScionError(f"scion « {entry.ref.key} » : {stem} est absent")
+            ignored = _ignored(rootstock, entry, stem)
+            excluded += len(ignored)
             blocked: list[Path] = []
-            for kind, relative in _walk(stem):
+            for kind, relative in _walk(stem, ignored):
                 if any(_within(relative, top) for top in blocked):
                     continue
                 target = trunk / relative
@@ -250,6 +274,8 @@ def _graft_entries(rootstock: Rootstock, chosen: list[GraftedEntry], entries) ->
     except ScionError:
         _rollback(created_links, created_dirs)
         raise
+    if excluded:
+        log.info("greffe : %d chemin(s) ignoré(s) par git, non greffé(s) (détail avec -v)", excluded)
     return created_links
 
 
@@ -265,11 +291,14 @@ def ungraft(rootstock: Rootstock, force: bool = False) -> None:
 
     A regular file in the trunk is user data, not a graft: it stops the ungraft
     unless ``force`` is given, in which case it is kept and everything else goes.
+    A file the rootstock tolerates is not user data: it goes with the rest.
     """
     trunk = rootstock.trunk
     if not trunk.is_dir():
         return
-    _check_stray(trunk, force)
+    for path in _check_stray(rootstock, force):
+        path.unlink()
+        log.debug("supprimé (toléré) : %s", path.relative_to(trunk))
     for dirpath, dirnames, filenames in os.walk(trunk, topdown=False, followlinks=False):
         for name in filenames + dirnames:
             path = Path(dirpath) / name
@@ -282,21 +311,58 @@ def ungraft(rootstock: Rootstock, force: bool = False) -> None:
                     pass
 
 
-def _check_stray(trunk: Path, force: bool) -> None:
-    stray = [
-        Path(dirpath) / name
-        for dirpath, _, filenames in os.walk(trunk, followlinks=False)
-        for name in filenames
-        if not (Path(dirpath) / name).is_symlink()
-        and not (Path(dirpath) == trunk and name == GRAFTED_LIST)
-    ]
+def _check_stray(rootstock: Rootstock, force: bool) -> list[Path]:
+    """Stop on a regular file of the trunk, unless ``force`` is given.
+
+    Files the rootstock tolerates never stop anything: they are returned, for
+    the caller to remove.
+    """
+    trunk = rootstock.trunk
+    patterns = _tolerated_patterns(rootstock)
+    stray: list[Path] = []
+    tolerated: list[Path] = []
+    for dirpath, _, filenames in os.walk(trunk, followlinks=False):
+        for name in filenames:
+            path = Path(dirpath) / name
+            if path.is_symlink() or (Path(dirpath) == trunk and name == GRAFTED_LIST):
+                continue
+            (tolerated if _is_tolerated(name, patterns) else stray).append(path)
     if stray and not force:
         listing = "\n".join(f"  {path.relative_to(trunk)}" for path in stray)
         raise ScionError(
             f"le trunk {trunk} contient des fichiers qui ne sont pas des greffes :\n"
-            f"{listing}\nDéplacez-les, ou utilisez --force pour les conserver et "
-            "dégreffer le reste"
+            f"{listing}\nDéplacez-les, déclarez leur motif dans {rootstock.tolerated}, "
+            "ou utilisez --force pour les conserver et dégreffer le reste"
         )
+    return tolerated
+
+
+def _tolerated_patterns(rootstock: Rootstock) -> list[str]:
+    """The patterns of the rootstock's tolerated file; none when it is absent."""
+    try:
+        text = rootstock.tolerated.read_text()
+    except FileNotFoundError:
+        return []
+    lines = (line.strip() for line in text.splitlines())
+    return [line for line in lines if line and not line.startswith("#")]
+
+
+def _is_tolerated(name: str, patterns: list[str]) -> bool:
+    return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
+
+
+def _drop_tolerated(directory: Path, patterns: list[str]) -> None:
+    """Remove the tolerated files of ``directory`` when they are all it holds."""
+    try:
+        children = list(directory.iterdir())
+    except OSError:
+        return
+    if not all(child.is_file() and not child.is_symlink()
+               and _is_tolerated(child.name, patterns) for child in children):
+        return
+    for child in children:
+        child.unlink()
+        log.debug("supprimé (toléré) : %s", child)
 
 
 # --------------------------------------------------------------------------
@@ -342,10 +408,12 @@ def _restore(removed: list[tuple[Path, str]]) -> None:
 def _prune(rootstock: Rootstock, candidates, providers) -> None:
     """Remove the candidate directories left empty that no provider grafts.
 
-    A directory a remaining scion declares -- even an empty one -- stays.
+    A directory a remaining scion declares -- even an empty one -- stays; one
+    holding nothing but tolerated files goes, and so do they.
     """
     trunk = rootstock.trunk
     stems = [_stem(rootstock, entry) for entry in providers]
+    patterns = _tolerated_patterns(rootstock)
     every: set[Path] = set()
     for directory in candidates:
         while directory != trunk and trunk in directory.parents:
@@ -355,6 +423,7 @@ def _prune(rootstock: Rootstock, candidates, providers) -> None:
         relative = directory.relative_to(trunk)
         if any((stem / relative).is_dir() for stem in stems):
             continue
+        _drop_tolerated(directory, patterns)
         try:
             directory.rmdir()
         except OSError:
@@ -370,7 +439,7 @@ def graft_scions(rootstock: Rootstock, keys: list[str], force: bool = False) -> 
     entries = read_grafted(rootstock.grafted_list)
     chosen = [_entry(entries, key) for key in keys]
     rootstock.trunk.mkdir(parents=True, exist_ok=True)
-    _check_stray(rootstock.trunk, force)
+    _check_stray(rootstock, force)
     removed = _unlink(rootstock, chosen)
     try:
         links = _graft_entries(rootstock, chosen, entries)
@@ -391,15 +460,16 @@ def remove(rootstock: Rootstock, key: str, purge: bool = False, force: bool = Fa
     entries = read_grafted(rootstock.grafted_list)
     entry = _entry(entries, key)
     clone = _purgeable_clone(rootstock, entry, entries) if purge else None
-    _check_stray(rootstock.trunk, force)
+    _check_stray(rootstock, force)
 
     removed = _unlink(rootstock, [entry])
     del entries[entry.ref.key]
     candidates = [path.parent for path, _ in removed]
     stem = _stem(rootstock, entry)
     if stem.is_dir():
+        ignored = _ignored(rootstock, entry, stem)
         candidates += [rootstock.trunk / relative
-                       for kind, relative in _walk(stem) if kind == "dir"]
+                       for kind, relative in _walk(stem, ignored) if kind == "dir"]
     _prune(rootstock, candidates, entries.values())
     write_grafted(rootstock.grafted_list, entries.values())
     log.info("scion %s retiré : %d feuilles", entry.ref.key, len(removed))
