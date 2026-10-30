@@ -1,5 +1,34 @@
 # Journal des modifications
 
+## 0.5.2.0
+
+Changement de comportement de la greffe et nouveau fichier de rootstock
+facultatif ; formats existants et commandes inchangés.
+
+### Nouveautés
+
+- **Fichiers ignorés par git non greffés.** Pour chaque scion d'un dépôt git,
+  les chemins non suivis que git ignore (`.gitignore`, `.git/info/exclude`,
+  `core.excludesFile`) sont exclus de la greffe, répertoires ignorés compris
+  (un appel `git ls-files --others --ignored --exclude-standard --directory`
+  par scion). Deux clones qui portent le même fichier ignoré au même chemin ne
+  sont plus en conflit. Un fichier suivi est toujours greffé, même s'il
+  correspond à une règle ; un fichier non suivi non ignoré aussi. Un scion hors
+  git, ou dont le dépôt contient le rootstock, n'est pas filtré. `-v` liste les
+  chemins exclus ; leur nombre est affiché s'il est non nul.
+- **`<rootstock>/.scion.trunk.tolerated`** : motifs `fnmatch` (nom du fichier,
+  un par ligne, `#` en commentaire) des fichiers réguliers tolérés dans le
+  trunk. Un fichier toléré ne bloque plus `ungraft`, `graft`, `graft --scion`,
+  `graft-remove`, `graft-clean` ni `graft-update`, sans `--force` ; `ungraft`
+  le supprime, `graft --scion` et `graft-remove` le suppriment avec le
+  répertoire qu'ils retirent. Écrit sans motif par `rootstock-install` (pas par
+  `--bare`) ; absent, rien n'est toléré.
+
+### Changement
+
+- Le message de refus d'un fichier régulier du trunk cite le fichier des motifs
+  tolérés.
+
 ## 0.5.1.1
 
 Correction ; formats de fichiers et commandes inchangés.

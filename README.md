@@ -20,6 +20,13 @@ d'origine dans `depots/`. Deux scions peuvent donc partager une racine sans que
 l'un écrive dans le clone de l'autre, et le rootstock peut être déplacé ou monté
 ailleurs (conteneur) sans regreffer.
 
+Ce que git ignore dans un clone (`.gitignore`, `.git/info/exclude`,
+`core.excludesFile`) n'est pas greffé : deux clones qui portent le même fichier
+ignoré au même chemin ne sont pas en conflit. Un fichier suivi l'est toujours,
+même s'il correspond à une règle ; un fichier nouveau, non suivi et non ignoré,
+l'est aussi. Un scion hors git, ou dont le dépôt contient le rootstock
+lui-même, n'est pas filtré. `-v` liste les chemins exclus.
+
 Python ≥ 3.10, bibliothèque standard uniquement. Linux et macOS.
 
 ## Installation
@@ -152,6 +159,7 @@ Codes de retour : `0` succès, `1` erreur d'utilisation ou de configuration,
 ```
 mon-arbre/
 ├── .scion.rootstock.signature     marque le rootstock (fichier vide)
+├── .scion.trunk.tolerated         fichiers tolérés dans le trunk (sauf --bare)
 ├── depots/                        les clones git — jamais modifiés
 │   ├── <shelf>/<prefix>/<version>/    un scion distant
 │   ├── generation/building/           produit par rootstock-install (sauf --bare)
@@ -160,6 +168,22 @@ mon-arbre/
     ├── .scion.grafted.list        ce qui est greffé (marque le trunk)
     └── ...                        répertoires réels, fichiers = liens relatifs
 ```
+
+Un fichier régulier du trunk est une donnée de l'utilisateur, pas une greffe :
+il bloque `ungraft`, `graft`, `graft-remove` et `graft-clean`, sauf `--force`,
+qui le conserve et dégreffe le reste. Les fichiers créés par le système (index
+d'un explorateur de fichiers, par exemple) se déclarent dans
+`.scion.trunk.tolerated` : un motif `fnmatch` par ligne, appliqué au nom du
+fichier, `#` en commentaire ; absent, rien n'est toléré.
+
+```
+.DS_Store
+._*
+```
+
+Un fichier toléré ne bloque rien et disparaît avec le dégreffage : `ungraft` le
+supprime, et `graft --scion` ou `graft-remove` le suppriment avec le répertoire
+qu'ils retirent.
 
 ## Les trois formats
 
