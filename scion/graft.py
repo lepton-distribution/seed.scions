@@ -103,6 +103,61 @@ def _fetch(wanted, single_branch: bool, update: bool) -> None:
             gitops.clone(url, destination, version, single_branch)
 
 
+def seed_updates(rootstock: Rootstock, seed_dots) -> list[Path]:
+    """The seed repositories to fast-forward; stop on any that cannot be.
+
+    A seed moves with its upstream, by fast-forward only. One with changes to
+    tracked files, or one that diverged, is an error; nothing has been changed
+    yet when it is raised. A seed outside git, without an upstream, or in the
+    repository that holds the rootstock itself is left as it is, and so is one
+    that is only ahead of its upstream.
+    """
+    behind: list[Path] = []
+    seen: set[Path] = set()
+    for dot in seed_dots:
+        top = gitops.toplevel(Path(dot))
+        if top is None:
+            log.debug("graine %s : hors git, laissée telle quelle", dot)
+            continue
+        top = top.resolve()
+        if top in seen:
+            continue
+        seen.add(top)
+        if _inside(rootstock.path.resolve(), top):
+            log.debug("graine %s : dans le dépôt du rootstock, laissée telle quelle", top)
+            continue
+        upstream = gitops.upstream(top)
+        if upstream is None:
+            log.debug("graine %s : sans amont, laissée telle quelle", top)
+            continue
+        if gitops.tracked_changes(top):
+            raise ScionError(
+                f"graine {top} : modifications non commitées ; commitez-les ou "
+                "annulez-les avant la mise à jour (rien n'a été modifié)"
+            )
+        gitops.fetch(top)
+        ahead, late = gitops.ahead_behind(top)
+        if ahead and late:
+            raise ScionError(
+                f"graine {top} : branche divergée de {upstream} ({ahead} commit(s) "
+                f"locaux, {late} distant(s)) ; réconciliez-la avant la mise à jour "
+                "(rien n'a été modifié)"
+            )
+        if ahead:
+            log.info("graine %s : %d commit(s) non publié(s), laissée telle quelle", top, ahead)
+        elif late:
+            behind.append(top)
+    return behind
+
+
+def advance_seeds(seed_repositories: list[Path]) -> None:
+    """Fast-forward the repositories :func:`seed_updates` returned."""
+    for top in seed_repositories:
+        before = gitops.head(top)
+        gitops.fast_forward(top)
+        log.info("graine %s avancée : %s -> %s", top, before, gitops.head(top))
+
+
 def seeds(rootstock: Rootstock) -> list[str]:
     """The distinct seeds recorded in the grafted list, in insertion order."""
     found: list[str] = []
@@ -150,14 +205,19 @@ def _walk(base: Path, ignored: frozenset[Path] | set[Path] = frozenset()):
 def _ignored(rootstock: Rootstock, entry: GraftedEntry, stem: Path) -> set[Path]:
     """What git ignores under ``stem``, relative to it: never grafted.
 
-    A scion outside git ignores nothing; neither does one whose work tree holds
-    the rootstock itself, since those rules belong to the rootstock's own
-    repository, not to the scion.
+    A scion outside git follows the same rules, those of its own ``.gitignore``
+    files and of the global configuration. A scion whose work tree holds the
+    rootstock itself ignores nothing, since those rules belong to the
+    rootstock's own repository, not to the scion.
     """
     top = gitops.toplevel(stem)
-    if top is None or _inside(rootstock.path.resolve(), top.resolve()):
+    if top is None:
+        names = gitops.ignored_outside(stem.parent, stem)
+    elif _inside(rootstock.path.resolve(), top.resolve()):
         return set()
-    ignored = {Path(name.rstrip("/")) for name in gitops.ignored(stem)}
+    else:
+        names = gitops.ignored(stem)
+    ignored = {Path(name.rstrip("/")) for name in names}
     for relative in sorted(ignored):
         log.debug("exclu (ignoré par git) : %s %s", entry.ref.key, relative)
     return ignored

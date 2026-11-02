@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import tempfile
 from pathlib import Path
 
 from .errors import GitError
@@ -80,12 +81,50 @@ def status_porcelain(dest: Path) -> str:
     return run(["status", "--porcelain"], cwd=dest)
 
 
+def tracked_changes(dest: Path) -> str:
+    """The changes to tracked files; untracked files are left out."""
+    return run(["status", "--porcelain", "--untracked-files=no"], cwd=dest)
+
+
+def upstream(dest: Path) -> str | None:
+    """The upstream of the current branch, ``None`` without one."""
+    try:
+        return run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+                   cwd=dest).strip() or None
+    except GitError:
+        return None
+
+
+def fetch(dest: Path) -> None:
+    run(["fetch", "--quiet"], cwd=dest)
+
+
+def ahead_behind(dest: Path) -> tuple[int, int]:
+    """Commits of ``HEAD`` missing from the upstream, and the other way round."""
+    ahead, behind = run(
+        ["rev-list", "--left-right", "--count", "HEAD...@{u}"], cwd=dest
+    ).split()
+    return int(ahead), int(behind)
+
+
+def fast_forward(dest: Path) -> None:
+    run(["merge", "--ff-only", "--quiet", "@{u}"], cwd=dest)
+
+
+def head(dest: Path) -> str:
+    return run(["rev-parse", "--short", "HEAD"], cwd=dest).strip()
+
+
 def toplevel(path: Path) -> Path | None:
     """The work tree holding ``path``; ``None`` outside git, or without git."""
     try:
         return Path(run(["rev-parse", "--show-toplevel"], cwd=path).strip())
     except GitError:
         return None
+
+
+_LIST_IGNORED = ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory",
+                 "-z", "--", "."]
 
 
 def ignored(path: Path) -> list[str]:
@@ -95,9 +134,25 @@ def ignored(path: Path) -> list[str]:
     ``core.excludesFile``. A directory ignored as a whole comes once, with a
     trailing ``/``; a tracked file is never listed, whatever the rules say.
     """
-    out = run(
-        ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory",
-         "-z", "--", "."],
-        cwd=path,
-    )
+    return _names(run(_LIST_IGNORED, cwd=path))
+
+
+def ignored_outside(root: Path, path: Path) -> list[str]:
+    """What git would ignore under ``path``, a tree outside git rooted at ``root``.
+
+    Same rules as :func:`ignored` -- the ``.gitignore`` files under ``root``
+    and ``core.excludesFile`` -- read through an empty repository made in a
+    temporary directory: nothing is ever written under ``root``.
+    """
+    with tempfile.TemporaryDirectory(prefix="scion-ignored-") as empty:
+        run(["init", "-q", "--bare", empty])
+        out = run(
+            ["-c", "core.bare=false", "--git-dir", empty, "--work-tree", str(root),
+             *_LIST_IGNORED],
+            cwd=path,
+        )
+    return _names(out)
+
+
+def _names(out: str) -> list[str]:
     return [name for name in out.split("\0") if name]
