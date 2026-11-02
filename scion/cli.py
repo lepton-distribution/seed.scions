@@ -107,7 +107,9 @@ def cmd_seed_clone(args) -> int:
 
 def cmd_seed_update(args) -> int:
     rootstock = _rootstock(args)
-    graft_ops.sync(rootstock, _seed_dot_scion(args), False, update=True)
+    dot = _seed_dot_scion(args)
+    graft_ops.advance_seeds(graft_ops.seed_updates(rootstock, [dot]))
+    graft_ops.sync(rootstock, dot, False, update=True)
     return 0
 
 
@@ -154,9 +156,12 @@ def cmd_graft_clean(args) -> int:
 
 def cmd_graft_update(args) -> int:
     rootstock = _rootstock(args)
+    seeds = [rootstock.resolve(seed) for seed in graft_ops.seeds(rootstock)]
+    behind = graft_ops.seed_updates(rootstock, seeds)
     graft_ops.ungraft(rootstock, force=args.force)
-    for seed in graft_ops.seeds(rootstock):
-        graft_ops.sync(rootstock, rootstock.resolve(seed), False, update=True)
+    graft_ops.advance_seeds(behind)
+    for seed in seeds:
+        graft_ops.sync(rootstock, seed, False, update=True)
     graft_ops.graft(rootstock)
     return 0
 
@@ -251,7 +256,7 @@ def build_parser() -> argparse.ArgumentParser:
     _single_branch(clone)
 
     update = sub.add_parser("seed-update", parents=[located],
-                            help="met à jour les clones des scions d'un seed")
+                            help="avance un seed (avance rapide sur son amont) et met à jour ses clones")
     update.add_argument("--seed", default=None, help="chemin du seed")
 
     scion_add = sub.add_parser(
@@ -289,7 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
     _force(clean)
     graft_update = sub.add_parser(
         "graft-update", parents=[located],
-        help="met à jour tous les seeds de la liste greffée puis regreffe",
+        help="avance les seeds de la liste greffée et leurs clones, puis regreffe",
     )
     _force(graft_update)
     graft_remove = sub.add_parser(

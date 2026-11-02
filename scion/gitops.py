@@ -81,6 +81,40 @@ def status_porcelain(dest: Path) -> str:
     return run(["status", "--porcelain"], cwd=dest)
 
 
+def tracked_changes(dest: Path) -> str:
+    """The changes to tracked files; untracked files are left out."""
+    return run(["status", "--porcelain", "--untracked-files=no"], cwd=dest)
+
+
+def upstream(dest: Path) -> str | None:
+    """The upstream of the current branch, ``None`` without one."""
+    try:
+        return run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+                   cwd=dest).strip() or None
+    except GitError:
+        return None
+
+
+def fetch(dest: Path) -> None:
+    run(["fetch", "--quiet"], cwd=dest)
+
+
+def ahead_behind(dest: Path) -> tuple[int, int]:
+    """Commits of ``HEAD`` missing from the upstream, and the other way round."""
+    ahead, behind = run(
+        ["rev-list", "--left-right", "--count", "HEAD...@{u}"], cwd=dest
+    ).split()
+    return int(ahead), int(behind)
+
+
+def fast_forward(dest: Path) -> None:
+    run(["merge", "--ff-only", "--quiet", "@{u}"], cwd=dest)
+
+
+def head(dest: Path) -> str:
+    return run(["rev-parse", "--short", "HEAD"], cwd=dest).strip()
+
+
 def toplevel(path: Path) -> Path | None:
     """The work tree holding ``path``; ``None`` outside git, or without git."""
     try:

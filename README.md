@@ -131,7 +131,7 @@ scion seed-add [--version BRANCHE] [--single-branch] URL|CHEMIN
                                       ajoute un seed et clone ses scions
 scion seed-clone  [--seed CHEMIN] [--single-branch]
                                       clone les scions d'un seed déjà présent
-scion seed-update [--seed CHEMIN]     met à jour les clones d'un seed
+scion seed-update [--seed CHEMIN]     avance un seed et met à jour ses clones
 scion seed-scion-add [--seed CHEMIN] [--replace] shelf@prefix::suffix VERSION EMPLACEMENT [CHEMIN]
                                       déclare un scion dans un seed
 scion seed-scion-remove [--seed CHEMIN] shelf@prefix::suffix
@@ -142,7 +142,7 @@ scion graft-remove [--purge] [--force] shelf@prefix::suffix
                                       retire un scion du trunk (et son clone)
 scion ungraft [--force]               vide le trunk
 scion graft-clean [--force]           vide le trunk et oublie la liste greffée
-scion graft-update                    met à jour tous les seeds puis regreffe
+scion graft-update                    avance tous les seeds et leurs clones, puis regreffe
 scion git --key shelf@prefix::suffix --args "..."
                                       exécute git dans le dépôt d'un scion
 ```
@@ -241,6 +241,14 @@ scion graft
 
 Ensuite `scion graft-update` remet à jour tous les dépôts et reconstruit le
 trunk ; `scion ungraft` le vide sans toucher aux clones.
+
+`graft-update` et `seed-update` avancent aussi le dépôt git de chaque seed, par
+avance rapide sur son amont, avant de lire ses scions : un scion ajouté au seed
+publié est donc cloné et greffé. Un seed qui a des modifications de fichiers
+suivis, ou dont la branche a divergé, arrête la commande avant toute
+modification (trunk intact). Un seed hors git, sans amont, ou dans le dépôt qui
+contient le rootstock est laissé tel quel ; un seed seulement en avance sur son
+amont aussi.
 
 ### Faire évoluer un seed
 
