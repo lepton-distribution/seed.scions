@@ -1,5 +1,29 @@
 # Journal des modifications
 
+## 0.5.3.0
+
+Changement de comportement de `graft-update`, `seed-update` et de la greffe des
+scions hors git ; formats de fichiers et commandes inchangés.
+
+### Nouveautés
+
+- **La graine avance avec son amont.** `graft-update` et `seed-update` avancent
+  le dépôt git de chaque seed avant de lire ses scions : `git fetch`, puis
+  `git merge --ff-only @{u}`. Un scion ajouté au seed publié est donc cloné et
+  greffé sans `git pull` préalable. Les contrôles précèdent le dégreffage : un
+  seed avec des modifications de fichiers suivis, ou dont la branche a divergé
+  de son amont, arrête la commande (code 1) sans rien modifier, trunk compris.
+  Les fichiers non suivis du seed n'arrêtent rien. Un seed hors git, sans amont,
+  dans le dépôt qui contient le rootstock, ou seulement en avance sur son amont
+  est laissé tel quel (`-v` le signale).
+- **Scions hors git filtrés par les règles de git.** Un scion hors git suit les
+  règles du filtre de 0.5.2.0 : ses propres fichiers `.gitignore` et
+  `core.excludesFile` (par exemple `.DS_Store`), lus par `git ls-files` au
+  travers d'un dépôt vide créé dans un répertoire temporaire ; rien n'est écrit
+  dans la source. Un lien déjà greffé vers un chemin désormais exclu disparaît
+  à la regreffe suivante. Un scion dont le dépôt contient le rootstock reste
+  sans filtre.
+
 ## 0.5.2.0
 
 Changement de comportement de la greffe et nouveau fichier de rootstock
