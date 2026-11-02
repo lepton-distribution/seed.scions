@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import tempfile
 from pathlib import Path
 
 from .errors import GitError
@@ -88,6 +89,10 @@ def toplevel(path: Path) -> Path | None:
         return None
 
 
+_LIST_IGNORED = ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory",
+                 "-z", "--", "."]
+
+
 def ignored(path: Path) -> list[str]:
     """The untracked paths under ``path`` that git ignores, relative to it.
 
@@ -95,9 +100,25 @@ def ignored(path: Path) -> list[str]:
     ``core.excludesFile``. A directory ignored as a whole comes once, with a
     trailing ``/``; a tracked file is never listed, whatever the rules say.
     """
-    out = run(
-        ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory",
-         "-z", "--", "."],
-        cwd=path,
-    )
+    return _names(run(_LIST_IGNORED, cwd=path))
+
+
+def ignored_outside(root: Path, path: Path) -> list[str]:
+    """What git would ignore under ``path``, a tree outside git rooted at ``root``.
+
+    Same rules as :func:`ignored` -- the ``.gitignore`` files under ``root``
+    and ``core.excludesFile`` -- read through an empty repository made in a
+    temporary directory: nothing is ever written under ``root``.
+    """
+    with tempfile.TemporaryDirectory(prefix="scion-ignored-") as empty:
+        run(["init", "-q", "--bare", empty])
+        out = run(
+            ["-c", "core.bare=false", "--git-dir", empty, "--work-tree", str(root),
+             *_LIST_IGNORED],
+            cwd=path,
+        )
+    return _names(out)
+
+
+def _names(out: str) -> list[str]:
     return [name for name in out.split("\0") if name]

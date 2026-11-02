@@ -1,4 +1,9 @@
-"""Files git ignores in a clone are never grafted; everything else still is."""
+"""Files git ignores are never grafted; everything else still is.
+
+A scion outside git follows git's rules too: those of its own ``.gitignore``
+files and of the global configuration, read through an empty repository kept
+out of the source.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,7 @@ from support import FixtureCase, oracle, run
 
 ALPHA_CLONE = "depots/alpha/core/master"
 BETA_CLONE = "depots/beta/tools/master"
+BUILDING = "depots/generation/building"
 
 
 class IgnoredCase(FixtureCase):
@@ -68,12 +74,48 @@ class TestIgnoredFiles(IgnoredCase):
         self.assertTrue((self.trunk / "tools/bin/tool.sh").is_symlink())
         self.assertEqual(self.real_paths(), oracle())
 
-    def test_scion_outside_git_is_not_filtered(self):
-        output = self.rootstock / "depots/generation/building/scion/building/output"
+    def test_scion_outside_git_follows_the_global_rules(self):
+        output = self.rootstock / BUILDING / "scion/building/output"
         (output / ".DS_Store").write_text("finder\n")
+        (output / "result.bin").write_text("built\n")
         code, _, err = self.graft()
         self.assertEqual(code, 0, err)
-        self.assertTrue((self.trunk / "building/output/.DS_Store").is_symlink())
+        self.assertFalse(os.path.lexists(self.trunk / "building/output/.DS_Store"))
+        self.assertTrue((self.trunk / "building/output/result.bin").is_symlink())
+
+    def test_scion_outside_git_follows_its_own_gitignore(self):
+        source = self.rootstock / BUILDING
+        (source / ".gitignore").write_text("*.tmp\nstaging/\n")
+        output = source / "scion/building/output"
+        (output / "work.tmp").write_text("temporary\n")
+        (output / "result.bin").write_text("built\n")
+        (source / "scion/building/staging/lib/libx.a").write_text("archive\n")
+        code, _, err = self.graft()
+        self.assertEqual(code, 0, err)
+        self.assertFalse(os.path.lexists(self.trunk / "building/output/work.tmp"))
+        self.assertFalse(os.path.lexists(self.trunk / "building/staging"))
+        self.assertTrue((self.trunk / "building/output/result.bin").is_symlink())
+
+    def test_link_into_a_scion_outside_git_goes_on_regraft(self):
+        output = self.rootstock / BUILDING / "scion/building/output"
+        (output / "run.log").write_text("log\n")
+        self.graft()
+        self.assertTrue((self.trunk / "building/output/run.log").is_symlink())
+        (self.rootstock / BUILDING / ".gitignore").write_text("*.log\n")
+        code, _, err = run("graft", "--scion", "local@building", cwd=self.rootstock)
+        self.assertEqual(code, 0, err)
+        self.assertFalse(os.path.lexists(self.trunk / "building/output/run.log"))
+
+    def test_scion_outside_git_is_left_untouched_and_exclusions_logged(self):
+        source = self.rootstock / BUILDING
+        (source / "scion/building/output/.DS_Store").write_text("finder\n")
+        before = sorted(source.rglob("*"))
+        with self.assertLogs("scion.graft", level="DEBUG") as logs:
+            code, _, err = self.graft()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(sorted(source.rglob("*")), before)
+        self.assertTrue(any("local/building building/output/.DS_Store" in line
+                            for line in logs.output))
 
     def test_rules_of_a_repository_holding_the_rootstock_do_not_apply(self):
         subprocess.run(["git", "init", "-q"], cwd=self.base, check=True)

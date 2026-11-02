@@ -150,14 +150,19 @@ def _walk(base: Path, ignored: frozenset[Path] | set[Path] = frozenset()):
 def _ignored(rootstock: Rootstock, entry: GraftedEntry, stem: Path) -> set[Path]:
     """What git ignores under ``stem``, relative to it: never grafted.
 
-    A scion outside git ignores nothing; neither does one whose work tree holds
-    the rootstock itself, since those rules belong to the rootstock's own
-    repository, not to the scion.
+    A scion outside git follows the same rules, those of its own ``.gitignore``
+    files and of the global configuration. A scion whose work tree holds the
+    rootstock itself ignores nothing, since those rules belong to the
+    rootstock's own repository, not to the scion.
     """
     top = gitops.toplevel(stem)
-    if top is None or _inside(rootstock.path.resolve(), top.resolve()):
+    if top is None:
+        names = gitops.ignored_outside(stem.parent, stem)
+    elif _inside(rootstock.path.resolve(), top.resolve()):
         return set()
-    ignored = {Path(name.rstrip("/")) for name in gitops.ignored(stem)}
+    else:
+        names = gitops.ignored(stem)
+    ignored = {Path(name.rstrip("/")) for name in names}
     for relative in sorted(ignored):
         log.debug("exclu (ignoré par git) : %s %s", entry.ref.key, relative)
     return ignored

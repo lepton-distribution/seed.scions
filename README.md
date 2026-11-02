@@ -24,8 +24,10 @@ Ce que git ignore dans un clone (`.gitignore`, `.git/info/exclude`,
 `core.excludesFile`) n'est pas greffé : deux clones qui portent le même fichier
 ignoré au même chemin ne sont pas en conflit. Un fichier suivi l'est toujours,
 même s'il correspond à une règle ; un fichier nouveau, non suivi et non ignoré,
-l'est aussi. Un scion hors git, ou dont le dépôt contient le rootstock
-lui-même, n'est pas filtré. `-v` liste les chemins exclus.
+l'est aussi. Un scion hors git suit les mêmes règles : ses propres fichiers
+`.gitignore` et `core.excludesFile`, lus au travers d'un dépôt vide temporaire,
+sans rien écrire dans la source. Un scion dont le dépôt contient le rootstock
+lui-même n'est pas filtré. `-v` liste les chemins exclus.
 
 Python ≥ 3.10, bibliothèque standard uniquement. Linux et macOS.
 
