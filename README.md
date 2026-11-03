@@ -250,6 +250,19 @@ modification (trunk intact). Un seed hors git, sans amont, ou dans le dépôt qu
 contient le rootstock est laissé tel quel ; un seed seulement en avance sur son
 amont aussi.
 
+Les clones existants suivent la même règle, pour `graft-update`, `seed-update` et
+`seed-add` : chacun est contrôlé avant toute modification, puis avancé par
+`git fetch` et `git merge --ff-only @{u}` ; scion ne fait jamais de `git pull`.
+Un clone qui n'est pas sur sa version déclarée (autre branche, `HEAD` détaché),
+sans amont, divergé, ou en retard avec des modifications de fichiers suivis
+arrête la commande ; le message nomme tous les clones concernés et la commande
+de remise. Une version déclarée par un tag est vérifiée (`HEAD` sur le tag, tag
+inchangé dans l'amont), jamais tirée.
+
+Si la regreffe de `graft` ou de `graft-update` échoue (conflit, git), le trunk
+est rétabli tel qu'il était (liens, répertoires, `.scion.grafted.list`) ; le
+message le signale.
+
 ### Faire évoluer un seed
 
 Aucune de ces commandes ne fait de `git pull` ; `seed-scion-*` n'éditent que

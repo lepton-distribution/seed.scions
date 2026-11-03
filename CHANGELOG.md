@@ -1,5 +1,36 @@
 # Journal des modifications
 
+## 0.5.4.0
+
+Changement de comportement de `graft-update`, `seed-update`, `seed-add` et
+`graft`. Formats de fichiers et commandes inchangés.
+
+### Nouveautés
+
+- **Clones à leur version déclarée.** `graft-update`, `seed-update` et
+  `seed-add` contrôlent chaque clone existant avant toute modification. Un
+  clone avance par `git fetch`, puis `git merge --ff-only @{u}`, comme une
+  graine. scion ne fait plus aucun `git pull`. Les cas suivants arrêtent la
+  commande (code 1), trunk et clones inchangés :
+  - clone sur une autre branche que sa version déclarée, ou en `HEAD`
+    détaché ;
+  - branche sans amont, ou divergée ;
+  - clone en retard avec des modifications de fichiers suivis.
+
+  Le message nomme tous les clones concernés et donne la commande de remise
+  (`git -C <clone> switch <version>`). Un clone seulement en avance, ou à
+  jour avec des modifications, est laissé tel quel. Auparavant, `git pull`
+  tirait la branche courante, quelle qu'elle soit.
+- **Versions déclarées par un tag.** Un tag est vérifié, jamais tiré : `HEAD`
+  doit désigner son commit, et le tag ne doit pas avoir bougé dans l'amont
+  (`origin`). Auparavant, `graft-update` échouait toujours sur un tel scion.
+- **Trunk rétabli si la regreffe échoue.** `graft` et `graft-update` relèvent
+  le trunk avant de le vider : liens, répertoires et `.scion.grafted.list`.
+  Ils le remettent en place si la résolution des graines, le dégreffage ou la
+  greffe échoue. Le message le signale, et compte les liens qui pointent vers
+  des fichiers retirés des clones depuis. Auparavant, un conflit ou un échec
+  de git après le dégreffage laissait un trunk vide.
+
 ## 0.5.3.0
 
 Changement de comportement de `graft-update`, `seed-update` et de la greffe des
