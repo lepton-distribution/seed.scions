@@ -82,34 +82,42 @@ def cmd_seed_add(args) -> int:
     if not args.seed_url:
         raise ScionError("seed-add attend l'URL ou le chemin d'un seed")
     rootstock = _rootstock(args)
-    local = _clone_seed(rootstock, args.seed_url, args.version, args.single_branch)
-    graft_ops.sync(rootstock, find_dot_scion(local), args.single_branch, update=True)
+    local, movable = _clone_seed(rootstock, args.seed_url, args.version, args.single_branch)
+    dot = find_dot_scion(local)
+    graft_ops.update_sources(rootstock, [dot], movable_seeds=[dot] if movable else [])
+    graft_ops.sync(rootstock, dot, args.single_branch)
     return 0
 
 
-def _clone_seed(rootstock, seed_url: str, version: str, single_branch: bool) -> Path:
+def _clone_seed(rootstock, seed_url: str, version: str,
+                single_branch: bool) -> tuple[Path, bool]:
+    """The seed's local copy, cloned if missing, and whether it may move.
+
+    An existing clone of a remote seed moves like any seed, by fast-forward
+    from its upstream (:func:`scion.graft.update_sources`); a seed given as a
+    path is left as it is.
+    """
     if not graft_ops.is_remote(seed_url):
-        return Path(seed_url).resolve()
+        return Path(seed_url).resolve(), False
     name = Path(seed_url.rstrip("/")).stem
     local = rootstock.depots / name / version
     if (local / ".git").exists():
-        gitops.pull(local)
-    else:
-        gitops.clone(seed_url, local, version, single_branch)
-    return local
+        return local, True
+    gitops.clone(seed_url, local, version, single_branch)
+    return local, False
 
 
 def cmd_seed_clone(args) -> int:
     rootstock = _rootstock(args)
-    graft_ops.sync(rootstock, _seed_dot_scion(args), args.single_branch, update=False)
+    graft_ops.sync(rootstock, _seed_dot_scion(args), args.single_branch)
     return 0
 
 
 def cmd_seed_update(args) -> int:
     rootstock = _rootstock(args)
     dot = _seed_dot_scion(args)
-    graft_ops.advance_seeds(graft_ops.seed_updates(rootstock, [dot]))
-    graft_ops.sync(rootstock, dot, False, update=True)
+    graft_ops.update_sources(rootstock, [dot])
+    graft_ops.sync(rootstock, dot)
     return 0
 
 
@@ -131,8 +139,7 @@ def cmd_graft(args) -> int:
     if args.scions:
         graft_ops.graft_scions(rootstock, args.scions, force=args.force)
         return 0
-    graft_ops.ungraft(rootstock, force=args.force)
-    graft_ops.graft(rootstock)
+    graft_ops.regraft(rootstock, force=args.force)
     return 0
 
 
@@ -157,12 +164,13 @@ def cmd_graft_clean(args) -> int:
 def cmd_graft_update(args) -> int:
     rootstock = _rootstock(args)
     seeds = [rootstock.resolve(seed) for seed in graft_ops.seeds(rootstock)]
-    behind = graft_ops.seed_updates(rootstock, seeds)
-    graft_ops.ungraft(rootstock, force=args.force)
-    graft_ops.advance_seeds(behind)
-    for seed in seeds:
-        graft_ops.sync(rootstock, seed, False, update=True)
-    graft_ops.graft(rootstock)
+    graft_ops.update_sources(rootstock, seeds)
+
+    def resolve_seeds():
+        for seed in seeds:
+            graft_ops.sync(rootstock, seed)
+
+    graft_ops.regraft(rootstock, force=args.force, prepare=resolve_seeds)
     return 0
 
 

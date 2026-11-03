@@ -73,8 +73,39 @@ def clone(url: str, dest: Path, version: str = "master", single_branch: bool = F
     run(["checkout", version], cwd=dest)
 
 
-def pull(dest: Path) -> None:
-    run(["pull"], cwd=dest)
+def current_branch(dest: Path) -> str | None:
+    """The branch checked out in ``dest``; ``None`` on a detached ``HEAD``."""
+    return run(["branch", "--show-current"], cwd=dest).strip() or None
+
+
+def is_branch(dest: Path, name: str) -> bool:
+    """Whether ``name`` is a branch of ``dest``, local or of one of its remotes."""
+    return bool(run(["for-each-ref", "--count=1", "--format=%(refname)",
+                     f"refs/heads/{name}", f"refs/remotes/*/{name}"], cwd=dest).strip())
+
+
+def tag_commit(dest: Path, name: str) -> str | None:
+    """The commit the local tag ``name`` designates; ``None`` without such a tag."""
+    try:
+        return run(["rev-parse", "--verify", "--quiet", f"refs/tags/{name}^{{commit}}"],
+                   cwd=dest).strip() or None
+    except GitError:
+        return None
+
+
+def remote_tag_commit(dest: Path, name: str) -> str | None:
+    """The commit the tag ``name`` designates in ``origin``; ``None`` if it has none."""
+    found: dict[str, str] = {}
+    out = run(["ls-remote", "--tags", "origin", f"refs/tags/{name}", f"refs/tags/{name}^{{}}"],
+              cwd=dest)
+    for line in out.splitlines():
+        sha, _, ref = line.partition("\t")
+        found[ref] = sha
+    return found.get(f"refs/tags/{name}^{{}}") or found.get(f"refs/tags/{name}")
+
+
+def commit(dest: Path, rev: str = "HEAD") -> str:
+    return run(["rev-parse", "--verify", f"{rev}^{{commit}}"], cwd=dest).strip()
 
 
 def status_porcelain(dest: Path) -> str:
