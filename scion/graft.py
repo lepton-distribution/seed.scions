@@ -41,18 +41,36 @@ def is_remote(location: str) -> bool:
 # --------------------------------------------------------------------------
 # seeds -> grafted list
 # --------------------------------------------------------------------------
-def sync(rootstock: Rootstock, seed_dot_scion: Path, single_branch: bool = False,
-         update: bool = False) -> None:
+def sync(rootstock: Rootstock, seed_dot_scion: Path, single_branch: bool = False) -> None:
     """Resolve one seed into the grafted list, cloning what is missing.
 
     Clones are grouped by destination, so a seed declaring sixteen scions cut
-    out of the same repository clones -- and pulls -- it once.
+    out of the same repository clones it once. An existing clone is left as it
+    is: :func:`update_sources` is what moves clones.
     """
     dot = Path(seed_dot_scion).resolve()
-    sources = read_sources(dot / SOURCES_LIST)
     entries = read_grafted(rootstock.grafted_list)
-    wanted: list[tuple[GraftedEntry, str, str]] = []
+    wanted = _wanted(rootstock, dot, entries)
+    _fetch(wanted, single_branch)
+    for entry, _, _ in wanted:
+        stem = rootstock.resolve(entry.local_path) / STEM_DIR
+        if not stem.is_dir():
+            raise ScionError(
+                f"scion « {entry.ref.key} » : {stem} est absent. Vérifiez la colonne "
+                f"« chemin dans le dépôt » de {SOURCES_LIST}"
+            )
+    rootstock.grafted_list.parent.mkdir(parents=True, exist_ok=True)
+    write_grafted(rootstock.grafted_list, entries.values())
 
+
+def _wanted(rootstock: Rootstock, dot: Path, entries) -> list[tuple[GraftedEntry, str, str]]:
+    """The scions ``dot`` brings, as ``(entry, url or "", clone directory)``.
+
+    ``entries`` -- the grafted list -- is updated in place; a scion grafted in
+    a more recent version is kept, and left out of the result.
+    """
+    sources = read_sources(dot / SOURCES_LIST)
+    wanted: list[tuple[GraftedEntry, str, str]] = []
     for ref in read_ramifications(dot / RAMIFICATIONS):
         source = select_source(sources, ref)
         if is_remote(source.location):
@@ -75,32 +93,127 @@ def sync(rootstock: Rootstock, seed_dot_scion: Path, single_branch: bool = False
         wanted.append(
             (entry, source.location if is_remote(source.location) else "", str(clone_dir))
         )
-
-    _fetch(wanted, single_branch, update)
-    for entry, _, _ in wanted:
-        stem = rootstock.resolve(entry.local_path) / STEM_DIR
-        if not stem.is_dir():
-            raise ScionError(
-                f"scion « {entry.ref.key} » : {stem} est absent. Vérifiez la colonne "
-                f"« chemin dans le dépôt » de {SOURCES_LIST}"
-            )
-    rootstock.grafted_list.parent.mkdir(parents=True, exist_ok=True)
-    write_grafted(rootstock.grafted_list, entries.values())
+    return wanted
 
 
-def _fetch(wanted, single_branch: bool, update: bool) -> None:
-    """Clone or pull each distinct repository exactly once."""
+def _remote_clones(wanted) -> OrderedDict[str, tuple[str, str]]:
+    """Each distinct clone of a remote scion, with its URL and declared version."""
     seen: OrderedDict[str, tuple[str, str]] = OrderedDict()
     for entry, url, clone_dir in wanted:
         if url:
             seen.setdefault(clone_dir, (url, entry.ref.version))
-    for clone_dir, (url, version) in seen.items():
+    return seen
+
+
+def _fetch(wanted, single_branch: bool) -> None:
+    """Clone each missing repository exactly once."""
+    for clone_dir, (url, version) in _remote_clones(wanted).items():
         destination = Path(clone_dir)
-        if (destination / ".git").exists():
-            if update:
-                gitops.pull(destination)
-        else:
+        if not (destination / ".git").exists():
             gitops.clone(url, destination, version, single_branch)
+
+
+# --------------------------------------------------------------------------
+# clones at their declared version
+# --------------------------------------------------------------------------
+def update_sources(rootstock: Rootstock, seed_dots, movable_seeds=None) -> None:
+    """Bring the seeds, then their clones, to their declared versions.
+
+    Only by fast-forward from their upstreams. Every check comes first: a seed
+    or a clone that cannot be moved stops the command before anything has
+    changed. The clones are checked against the seeds as they are, then again,
+    for the clones they did not name yet, once the seeds have moved.
+    ``movable_seeds`` -- by default every seed -- are the seeds allowed to move.
+    """
+    seed_dots = [Path(dot) for dot in seed_dots]
+    behind_seeds = seed_updates(rootstock, seed_dots if movable_seeds is None else movable_seeds)
+    checked: set[str] = set()
+    behind = clone_updates(rootstock, seed_dots, checked)
+    advance_seeds(behind_seeds)
+    if behind_seeds:
+        behind += clone_updates(rootstock, seed_dots, checked)
+    advance_clones(behind)
+
+
+def clone_updates(rootstock: Rootstock, seed_dots, checked: set[str] | None = None) -> list[Path]:
+    """The existing clones to fast-forward; stop on any that cannot be.
+
+    A clone of a branch must have that branch checked out, an upstream, and no
+    divergence from it; behind its upstream, it must have no changes to
+    tracked files. A clone of a tag must have that tag checked out, and the
+    tag must not have moved in ``origin``. Every clone is checked before the
+    error is raised, so that it names them all. Clones already in ``checked``
+    are skipped; those checked here are added to it.
+    """
+    checked = set() if checked is None else checked
+    faults: list[str] = []
+    behind: list[Path] = []
+    for dot in seed_dots:
+        entries = read_grafted(rootstock.grafted_list)
+        wanted = _wanted(rootstock, Path(dot).resolve(), entries)
+        for clone_dir, (_, version) in _remote_clones(wanted).items():
+            if clone_dir in checked:
+                continue
+            checked.add(clone_dir)
+            destination = Path(clone_dir).resolve()
+            if not (destination / ".git").exists():
+                continue
+            fault, late = _check_clone(destination, version)
+            if fault:
+                faults.append(fault)
+            elif late:
+                behind.append(destination)
+    if faults:
+        raise ScionError(
+            f"{len(faults)} clone(s) à remettre à leur version déclarée avant la mise à jour "
+            "(trunk et clones inchangés) :\n" + "\n".join(f"  {fault}" for fault in faults)
+        )
+    return behind
+
+
+def _check_clone(clone: Path, version: str) -> tuple[str | None, bool]:
+    """``(fault, behind)`` for one clone and its declared version."""
+    branch = gitops.current_branch(clone)
+    where = f"branche « {branch} »" if branch else f"HEAD détaché sur {gitops.head(clone)}"
+    if gitops.is_branch(clone, version):
+        if branch != version:
+            return (f"{clone} : {where}, version déclarée « {version} » ; "
+                    f"git -C {clone} switch {version}"), False
+        upstream = gitops.upstream(clone)
+        if upstream is None:
+            return f"{clone} : branche « {version} » sans amont", False
+        gitops.fetch(clone)
+        ahead, late = gitops.ahead_behind(clone)
+        if ahead and late:
+            return (f"{clone} : branche « {version} » divergée de {upstream} ({ahead} commit(s) "
+                    f"locaux, {late} distant(s)) ; réconciliez-la"), False
+        if late and gitops.tracked_changes(clone):
+            return (f"{clone} : modifications non commitées et {late} commit(s) de retard sur "
+                    f"{upstream} ; commitez-les ou annulez-les"), False
+        if ahead:
+            log.info("clone %s : %d commit(s) non publié(s), laissé tel quel", clone, ahead)
+        return None, bool(late)
+    tagged = gitops.tag_commit(clone, version)
+    if tagged is None:
+        return f"{clone} : version déclarée « {version} » introuvable dans le clone", False
+    if gitops.commit(clone) != tagged:
+        return (f"{clone} : {where}, version déclarée : tag « {version} » ; "
+                f"git -C {clone} switch --detach {version}"), False
+    published = gitops.remote_tag_commit(clone, version)
+    if published is None:
+        log.info("clone %s : tag « %s » absent de l'amont, laissé tel quel", clone, version)
+    elif published != tagged:
+        return (f"{clone} : tag « {version} » déplacé dans l'amont ({tagged[:7]} -> "
+                f"{published[:7]}) ; vérifiez la version avant de reprendre le tag"), False
+    return None, False
+
+
+def advance_clones(clones: list[Path]) -> None:
+    """Fast-forward the clones :func:`clone_updates` returned."""
+    for clone in clones:
+        before = gitops.head(clone)
+        gitops.fast_forward(clone)
+        log.info("clone %s avancé : %s -> %s", clone, before, gitops.head(clone))
 
 
 def seed_updates(rootstock: Rootstock, seed_dots) -> list[Path]:
