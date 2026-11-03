@@ -484,6 +484,66 @@ def ungraft(rootstock: Rootstock, force: bool = False) -> None:
                     pass
 
 
+def regraft(rootstock: Rootstock, force: bool = False, prepare=None) -> int:
+    """Empty the trunk and graft it again; on failure, put back what it held.
+
+    ``prepare``, called first, may rewrite the grafted list. Whatever fails --
+    ``prepare``, the ungraft or the graft -- the trunk's links and directories
+    and the grafted list are restored as they were found, and the error goes
+    on, its message saying so.
+    """
+    state = _snapshot(rootstock)
+    try:
+        if prepare is not None:
+            prepare()
+        ungraft(rootstock, force=force)
+        return graft(rootstock)
+    except BaseException as exc:
+        note = _put_back(rootstock, state)
+        if isinstance(exc, ScionError):
+            exc.args = (f"{exc}\n{note}", *exc.args[1:])
+        else:
+            log.error("%s", note)
+        raise
+
+
+def _snapshot(rootstock: Rootstock):
+    """The grafted list's text, and the trunk's directories and links."""
+    trunk = rootstock.trunk
+    grafted = rootstock.grafted_list.read_text() if rootstock.grafted_list.exists() else None
+    directories: list[Path] = []
+    links: list[tuple[Path, str]] = []
+    if trunk.is_dir():
+        for dirpath, dirnames, filenames in os.walk(trunk, followlinks=False):
+            for name in dirnames + filenames:
+                path = Path(dirpath) / name
+                if path.is_symlink():
+                    links.append((path, os.readlink(path)))
+                elif path.is_dir():
+                    directories.append(path)
+    return grafted, directories, links
+
+
+def _put_back(rootstock: Rootstock, state) -> str:
+    """Restore what :func:`_snapshot` recorded; return a line saying so."""
+    grafted, directories, links = state
+    for directory in directories:
+        directory.mkdir(parents=True, exist_ok=True)
+    for path, target in links:
+        if not os.path.lexists(path):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.symlink_to(target)
+    if grafted is not None:
+        rootstock.grafted_list.write_text(grafted)
+    broken = sum(1 for path, _ in links if not path.exists())
+    note = (f"trunk rétabli dans son état antérieur ({len(links)} lien(s)), "
+            f"{GRAFTED_LIST} comprise")
+    if broken:
+        note += (f" ; {broken} lien(s) pointent vers des fichiers retirés des clones "
+                 "depuis : la prochaine greffe réussie les corrige")
+    return note
+
+
 def _check_stray(rootstock: Rootstock, force: bool) -> list[Path]:
     """Stop on a regular file of the trunk, unless ``force`` is given.
 

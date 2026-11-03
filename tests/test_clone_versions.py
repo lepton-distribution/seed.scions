@@ -1,4 +1,4 @@
-"""Clones are brought to their declared version.
+"""Clones are brought to their declared version, and a failed regraft keeps the trunk.
 
 ``graft-update``, ``seed-update`` and ``seed-add`` check every existing clone
 before anything moves: a clone off its declared version (another branch, a
@@ -6,6 +6,9 @@ detached ``HEAD``), diverged from its upstream, without one, or behind it with
 changes to tracked files stops the command; the trunk and the clones are left
 as they are. A clone moves by fast-forward only, never by ``git pull``. A
 version that is a tag is checked, not pulled.
+
+``graft`` and ``graft-update`` put back the trunk they found -- links,
+directories and grafted list -- when the regraft fails.
 """
 
 from __future__ import annotations
@@ -233,6 +236,33 @@ class TestTagVersion(CloneCase):
         self.advance_upstream()
         git(self.beta, "tag", "-f", "-a", "v1", "-m", "v1 moved")
         self.assert_refused(str(self.clone), "« v1 »", "amont")
+
+
+class TestFailedRegraftKeepsTheTrunk(CloneCase):
+    def test_conflict_brought_by_the_upstream(self):
+        # alpha's core::kernel already provides sys/root/include/kernel.h
+        self.advance_upstream("sys/root/include/kernel.h", "/* duplicate */\n")
+        code, _, err = run("graft-update", cwd=self.rootstock)
+        self.assertEqual(code, 1, err)
+        self.assertIn("conflit", err)
+        self.assertIn("rétabli", err)
+        self.assert_trunk_intact()
+
+    def test_graft_conflict_keeps_the_trunk(self):
+        self.seed_add(self.fx.seed_conflict)
+        code, _, err = self.graft()
+        self.assertEqual(code, 1, err)
+        self.assertIn("rétabli", err)
+        self.assertEqual(trunk_state(self.trunk), self.before)
+
+    def test_restored_trunk_regrafts_once_fixed(self):
+        self.seed_add(self.fx.seed_conflict)
+        self.graft()
+        code, _, err = run("graft-remove", "gamma@x::dup", cwd=self.rootstock)
+        self.assertEqual(code, 0, err)
+        code, _, err = self.graft()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(trunk_state(self.trunk), self.before)
 
 
 if __name__ == "__main__":

@@ -139,8 +139,7 @@ def cmd_graft(args) -> int:
     if args.scions:
         graft_ops.graft_scions(rootstock, args.scions, force=args.force)
         return 0
-    graft_ops.ungraft(rootstock, force=args.force)
-    graft_ops.graft(rootstock)
+    graft_ops.regraft(rootstock, force=args.force)
     return 0
 
 
@@ -166,10 +165,12 @@ def cmd_graft_update(args) -> int:
     rootstock = _rootstock(args)
     seeds = [rootstock.resolve(seed) for seed in graft_ops.seeds(rootstock)]
     graft_ops.update_sources(rootstock, seeds)
-    graft_ops.ungraft(rootstock, force=args.force)
-    for seed in seeds:
-        graft_ops.sync(rootstock, seed)
-    graft_ops.graft(rootstock)
+
+    def resolve_seeds():
+        for seed in seeds:
+            graft_ops.sync(rootstock, seed)
+
+    graft_ops.regraft(rootstock, force=args.force, prepare=resolve_seeds)
     return 0
 
 
