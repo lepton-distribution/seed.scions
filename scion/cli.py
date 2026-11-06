@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from . import __version__, gitops, graft as graft_ops, rootstock as rootstock_ops
-from . import seed as seed_ops
+from . import mirror as mirror_ops, seed as seed_ops
 from .errors import GitError, ScionError
 from .model import read_grafted
 from .rootstock import DEFAULT_TRUNK, HIDDEN_DIR, STEM_DIR
@@ -178,6 +178,17 @@ def cmd_graft_update(args) -> int:
     return 0
 
 
+def cmd_mirror_sync(args) -> int:
+    arguments = list(args.arguments)
+    explicit = None
+    if arguments and not mirror_ops.is_remote(arguments[0]):
+        explicit = arguments.pop(0)
+    rootstock = rootstock_ops.discover(explicit=explicit, trunk=args.trunk)
+    mirrors = mirror_ops.declared(rootstock, find_dot_scion(args.seed) if args.seed else None)
+    reports = mirror_ops.sync(rootstock, mirror_ops.select(mirrors, arguments), args.dry_run)
+    return 1 if any(report.signals for report in reports) else 0
+
+
 def cmd_git(args) -> int:
     rootstock = _rootstock(args)
     key = args.key.replace("@", "/", 1)
@@ -217,6 +228,7 @@ COMMANDS = {
     "graft-clean": cmd_graft_clean,
     "graft-update": cmd_graft_update,
     "graft-remove": cmd_graft_remove,
+    "mirror-sync": cmd_mirror_sync,
     "git": cmd_git,
 }
 
@@ -321,6 +333,20 @@ def build_parser() -> argparse.ArgumentParser:
     graft_remove.add_argument("key", metavar="shelf@prefix::suffix")
     graft_remove.add_argument("rootstock_path", nargs="?", default=None)
 
+    mirror = sub.add_parser(
+        "mirror-sync", parents=[common],
+        help="avance les miroirs déclarés (avance rapide seulement, rien de supprimé)",
+    )
+    mirror.add_argument("--seed", default=None,
+                        help="ne traiter que les miroirs de ce seed et de ses porteurs")
+    mirror.add_argument("--dry-run", action="store_true",
+                        help="calculer et rapporter, sans rien envoyer")
+    mirror.add_argument(
+        "arguments", nargs="*", metavar="[rootstock] [url du miroir]",
+        help="rootstock (par défaut, le premier trouvé en remontant), puis les miroirs à "
+             "traiter (par défaut, tous)",
+    )
+
     git = sub.add_parser("git", parents=[located],
                          help="exécute une commande git dans le dépôt d'un scion")
     git.add_argument("--key", required=True, metavar="shelf@prefix::suffix")
@@ -344,7 +370,12 @@ def _force(parser: argparse.ArgumentParser) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args, extra = parser.parse_known_args(argv)
+    if extra:
+        # positionals after an option: only mirror-sync takes several of them
+        if args.command != "mirror-sync" or any(item.startswith("-") for item in extra):
+            parser.error(f"unrecognized arguments: {' '.join(extra)}")
+        args.arguments += extra
     logging.basicConfig(
         level=logging.DEBUG if getattr(args, "verbose", False) else logging.INFO,
         format="%(message)s",

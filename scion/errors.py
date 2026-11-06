@@ -13,6 +13,12 @@ class ScionError(Exception):
     exit_code = 1
 
 
+class UsageError(ScionError):
+    """The command line names something that does not exist."""
+
+    exit_code = 2
+
+
 class GitError(ScionError):
     """A git invocation failed; git's own output travels with it."""
 
