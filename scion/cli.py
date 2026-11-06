@@ -68,7 +68,11 @@ def cmd_rootstock_information(args) -> int:
     rootstock = _rootstock(args)
     print(f"rootstock: {rootstock.path}")
     print(f"trunk: {rootstock.trunk_name}")
-    print(f"scions grafted: {len(read_grafted(rootstock.grafted_list))}")
+    entries = read_grafted(rootstock.grafted_list)
+    print(f"scions grafted: {len(entries)}")
+    projected = graft_ops.projected_keys(rootstock, entries)
+    if projected:
+        print(f"scions projected: {len(projected)}")
     return 0
 
 

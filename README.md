@@ -223,12 +223,57 @@ le dépôt n'est alors cloné et mis à jour qu'une fois.
 ### `<rootstock>/<trunk>/.scion.grafted.list` — ce qui est greffé
 
 ```
-shelf   prefix::suffix   version   chemin local   [.scion du seed d'origine]
+shelf   prefix::suffix   version   chemin local   [.scion du seed d'origine]   [.scion porteur]
 ```
 
 Écrit par `seed-add`, `seed-clone` et `seed-update`, lu par `graft`. Les chemins
 qui sont dans le rootstock y sont écrits relativement à lui : le fichier est
-versionnable et le rootstock déplaçable.
+versionnable et le rootstock déplaçable. La 6ᵉ colonne n'existe que pour une
+clé projetée déclarée par un scion porteur (ci-dessous).
+
+## Projection d'un dépôt tiers (0.6.0.0)
+
+Un dépôt qui n'a pas de répertoire `scion/` se greffe par **projection** : on
+déclare quels de ses fichiers vont où dans le trunk. La spécification complète,
+règle par règle, est dans [`doc/projection-miroir.md`](doc/projection-miroir.md)
+(partie A).
+
+La clé se déclare comme un scion ordinaire (sources et ramifications), et ses
+lignes de projection vont dans `.scion.projections`, dans le même `.scion/` :
+
+```
+# .scion.sources.list
+tiers   vendor-hal   v1.2.0   https://example.org/vendor-hal.git
+# .scion.ramifications
+tiers   vendor-hal   v1.2.0
+# .scion.projections : shelf nom motif destination, ou shelf nom !motif
+tiers   vendor-hal   Inc/**          scion/include/vendor/
+tiers   vendor-hal   Src/*.c         scion/src/vendor/
+tiers   vendor-hal   LICENSE.md      scion/include/vendor/
+tiers   vendor-hal   !Src/legacy.c
+```
+
+- Les motifs portent sur les fichiers suivis par git au commit épinglé, jamais
+  sur le disque : `d/**` (récursif), `d/*` ou `d/x_[ab]*.h` (jokers dans le
+  dernier segment seulement), ou un chemin de fichier. `!motif` exclut.
+- Une destination commence par `scion/` (la racine du trunk). Terminée par `/`,
+  elle remplace la base du motif ; sans `/`, elle renomme un fichier.
+- La version est un **tag** ou un **commit complet** (40 caractères) ; une
+  branche, `*` et `?` sont refusés. Le clone est partiel
+  (`--filter=blob:none`) et en `HEAD` détaché ; il doit rester à son commit et
+  sans modification de fichier suivi, sinon la greffe est refusée.
+- Toute ligne mal formée, tout motif sans correspondance, toute collision de
+  casse dans le trunk est une erreur (code 1), qui cite fichier et ligne.
+
+Les lignes peuvent être dans la graine, ou dans le `scion/.scion/` d'un scion
+ordinaire qui dépend du dépôt tiers : ce scion **porteur** emporte ses
+projections partout où il est greffé. Un porteur ne déclare que des clés
+projetées ; son `.scion/` n'est jamais greffé. `graft-remove <porteur>` retire
+aussi ses projections ; une projection que le porteur ne déclare plus est
+retirée à la synchronisation suivante.
+
+Un rootstock sans aucun `.scion.projections` se comporte exactement comme en
+0.5.4.0.
 
 ## Utilisation
 

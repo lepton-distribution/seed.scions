@@ -95,7 +95,9 @@ Un motif est un chemin relatif à la racine du dépôt tiers, segments séparés
 - **P-T3.** Destination sans `/` final : un fichier. Admise seulement pour la forme fichier (le
   fichier est alors renommé). Pour les autres formes, c'est une erreur.
 - **P-T4.** Interdits dans une destination : segment vide, `.`, `..`, segment `.scion`, et le chemin
-  `scion/.scion.grafted.list`.
+  `scion/.scion.grafted.list`. La règle vaut aussi pour chaque chemin du trunk calculé (destination
+  et chemin relatif à la base) : un fichier amont placé sous un répertoire `.scion/`, ou projeté en
+  `.scion.grafted.list` à la racine du trunk, est une erreur qui nomme la ligne et le fichier.
 
 ### A.5 Exclusions
 
@@ -127,28 +129,38 @@ fil de l'eau.
   que par la casse (comparaison sur chaque segment, répertoires compris), dont l'un au moins vient
   d'une projection, sont une **erreur sur tout système**, que le système de fichiers distingue ou
   non la casse. Un rootstock qui greffe sur l'un greffe ainsi sur l'autre. Exemple : une projection
-  vers `scion/inc/` et un scion ordinaire qui fournit `Inc/b.h`.
+  vers `scion/inc/` et un scion ordinaire qui fournit `Inc/b.h`. Les segments sont comparés par
+  `str.casefold()`. `graft --scion` compare aussi aux chemins déjà présents dans le trunk.
 
 ### A.8 Version épinglée, clone, état du clone
 
 - **P-V1.** La version d'une clé projetée est un **tag** ou un **commit complet** (40 caractères
   hexadécimaux ; une version de cette forme est toujours lue comme un commit). Une branche, `*` et
-  `?` sont refusés pour une clé projetée.
+  `?` sont refusés pour une clé projetée. Tag et branche ne se distinguent qu'une fois le dépôt
+  cloné : une version qui désigne un tag (`refs/tags/<version>`) est lue comme un tag, même si une
+  branche porte le même nom ; sinon, une version qui n'est pas un commit complet est une erreur.
+  Le clone reste alors en place, comme le clone d'une version introuvable en 0.5.4.0.
 - **P-V2.** Emplacement distant : le clone va sous `depots/<shelf>/<prefix>/<version>`, comme pour
   un scion ordinaire. Deux clés de même `prefix` et de même version partagent donc le clone. Il est
   créé par `git clone --filter=blob:none --no-checkout`, puis `git checkout --detach <version>`.
-  `--single-branch` est sans effet pour une clé projetée.
+  `--single-branch` est sans effet pour une clé projetée. Un clone partagé entre une clé projetée et
+  un scion ordinaire (même `shelf`, `prefix` et version) est une erreur de résolution.
 - **P-V3.** Emplacement local : le chemin doit être un dépôt git, utilisé tel quel, jamais cloné ni
   déplacé.
 - **P-V4.** Tag : `HEAD` doit être le commit du tag ; un tag déplacé dans `origin` arrête
   `graft-update`, `seed-update` et `seed-add`, comme en 0.5.4.0. Commit : `HEAD` doit être ce
-  commit ; s'il est absent du clone, un `git fetch` est tenté, puis c'est une erreur.
+  commit ; s'il est absent du clone, `git fetch origin` (toutes les références) est tenté, puis
+  c'est une erreur. Aucun fetch par empreinte : il dépend de la configuration du serveur.
 - **P-V5.** Changer la version d'une clé projetée crée un nouveau clone (la version entre dans le
   chemin) ; l'ancien reste, `graft-remove --purge` ne le touche pas.
+- **P-V6.** La règle « un scion déjà greffé dans une version plus récente est conservé » ne
+  s'applique pas à une clé projetée : un commit ne se compare pas, et la projection suit son
+  `.scion/`. La version déclarée remplace toujours la version greffée.
 - **P-E1.** Avant toute greffe d'une clé projetée, le clone doit être à son commit épinglé
   (`HEAD`) et sans modification de fichier suivi (`git status --porcelain --untracked-files=no`
   vide). Sinon la greffe s'arrête (code 1, trunk rétabli) et nomme le clone et les fichiers. Les
-  fichiers non suivis ne bloquent rien et ne sont jamais projetés (P-M4).
+  fichiers non suivis ne bloquent rien et ne sont jamais projetés (P-M4). Le contrôle a lieu avant
+  le dégreffage : un refus laisse le trunk tel qu'il était.
 
 ### A.9 Scion porteur
 
@@ -167,12 +179,19 @@ fil de l'eau.
 - **P-P4.** Une même clé projetée déclarée dans deux `.scion/` (graine et porteur, ou deux
   porteurs) : erreur, sauf si ses lignes de sources, de ramifications et de projection sont
   identiques dans les deux. Les lignes sont comparées après normalisation des blancs, et les
-  projections comme un ensemble. La clé n'est alors greffée qu'une fois.
+  projections comme un ensemble. La clé n'est alors greffée qu'une fois ; sa 6ᵉ colonne est le
+  premier `.scion/` dans l'ordre P-P3 (absente si c'est la graine).
 - **P-P5.** La projection avance avec le porteur. Quand `graft-update` ou `seed-update` avance le
   clone d'un porteur, son `.scion/` est relu après l'avance. Une version nouvelle d'une clé projetée
-  y est clonée (P-V5).
+  y est clonée (P-V5). Les clones projetés déjà connus sont contrôlés avec ceux de la graine, avant
+  toute avance (P-V4) ; un clone déjà présent pour une version nouvelle est contrôlé à la greffe
+  (P-E1, trunk rétabli).
 - **P-P6.** `graft-remove <porteur>` retire aussi du trunk et de la liste greffée les clés projetées
   qu'il porte, et le dit. `--purge` s'applique au seul clone du porteur.
+- **P-P7.** Une clé projetée que son porteur ne déclare plus (après une avance ou une édition) est
+  retirée de la liste greffée à la résolution suivante de la graine, avec un message ; la regreffe
+  retire ses liens. Son clone reste. Ce n'est pas le cas d'une clé retirée d'une graine, qui reste
+  greffée comme en 0.5.4.0.
 
 ### A.10 Greffe, propriété et retrait
 
@@ -186,7 +205,9 @@ fil de l'eau.
 - **P-G3.** Propriété : un lien appartient à la clé dont le clone (racine, pour une clé projetée)
   préfixe sa cible. Un répertoire du trunk appartient à une clé projetée s'il est l'ancêtre d'un
   de ses chemins du trunk. Cela vaut pour le message de conflit, `graft --scion`, `graft-remove` et
-  l'élagage des répertoires vides.
+  l'élagage des répertoires vides. Quand plusieurs clés projetées partagent un clone (P-V2), un lien
+  appartient à celle dont la table contient son chemin du trunk ; un lien du clone qui n'est dans
+  aucune table est retiré par la regreffe ou le retrait de toute clé de ce clone.
 - **P-G4.** Le filtre des fichiers ignorés (0.5.2.0) ne s'applique pas à une clé projetée : la liste
   git l'a déjà exclu.
 - **P-G5.** `graft --scion <clé projetée>` relit ses lignes de projection et regreffe la clé seule ;
@@ -197,13 +218,13 @@ fil de l'eau.
 | Commande | Effet de la projection |
 | --- | --- |
 | `seed-add`, `seed-clone` | clonent aussi les clés projetées de la graine et des porteurs (P-P3, P-V2) |
-| `seed-update`, `graft-update` | contrôlent et avancent comme en 0.5.4.0, puis relisent les porteurs (P-P5) ; contrôles P-V4 |
+| `seed-update`, `graft-update` | contrôlent et avancent comme en 0.5.4.0, puis relisent les porteurs (P-P5, P-P7) ; contrôles P-V4 |
 | `graft` (complet, `--scion`) | résolution P-R*, casse P-K2, état du clone P-E1, conflits P-G2 ; trunk rétabli en cas d'échec |
 | `graft-remove [--purge]` | P-G3, P-P6 |
 | `ungraft`, `graft-clean` | inchangés |
 | `seed-scion-add`, `seed-scion-remove` | inchangés ; aucune commande n'écrit `.scion.projections` (édition à la main) |
 | `git --key` | admis pour une clé projetée |
-| `rootstock-information` | compte aussi les clés projetées |
+| `rootstock-information` | `scions grafted: N` compte aussi les clés projetées ; une ligne `scions projected: k` s'ajoute seulement si k > 0 (P-C1) |
 
 ### A.12 Messages et codes de retour
 

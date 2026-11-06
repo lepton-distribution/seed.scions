@@ -17,6 +17,7 @@ from .errors import ScionError
 RAMIFICATIONS = ".scion.ramifications"
 SOURCES_LIST = ".scion.sources.list"
 GRAFTED_LIST = ".scion.grafted.list"
+PROJECTIONS = ".scion.projections"
 
 _WHITESPACE = re.compile(r"[ \t\n]+")
 
@@ -97,15 +98,27 @@ class GraftedEntry:
 
     ``local_path`` and ``seed_dot_scion`` are relative to the rootstock whenever
     they sit inside it, so that the rootstock can be moved or committed.
+    ``carrier`` -- the sixth column -- is the ``.scion/`` of the scion that
+    declares a projected scion, when it is not the seed itself.
     """
 
     ref: ScionRef
     local_path: str
     seed_dot_scion: str = ""
+    carrier: str = ""
+
+    @property
+    def declared_in(self) -> str:
+        """The ``.scion/`` holding this scion's lines: the carrier, else the seed."""
+        return self.carrier or self.seed_dot_scion
 
     def serialize(self) -> str:
         line = f"{self.ref.shelf} {self.ref.name} {self.ref.version} {self.local_path}"
-        return f"{line} {self.seed_dot_scion}" if self.seed_dot_scion else line
+        if self.seed_dot_scion:
+            line += f" {self.seed_dot_scion}"
+        if self.carrier and self.carrier != self.seed_dot_scion:
+            line += f" {self.carrier}"
+        return line
 
 
 # --------------------------------------------------------------------------
@@ -117,6 +130,16 @@ def _lines(path: Path) -> list[list[str]]:
     except OSError as exc:
         raise ScionError(f"fichier illisible : {path} ({exc.strerror})") from exc
     return [f for f in (fields(line) for line in text.splitlines()) if f]
+
+
+def numbered_lines(path: Path) -> list[tuple[int, list[str]]]:
+    """Every non-empty line of ``path`` as ``(line number, fields)``."""
+    try:
+        text = Path(path).read_text()
+    except OSError as exc:
+        raise ScionError(f"fichier illisible : {path} ({exc.strerror})") from exc
+    return [(number, f) for number, f in
+            ((number, fields(line)) for number, line in enumerate(text.splitlines(), 1)) if f]
 
 
 def read_ramifications(path: Path) -> list[ScionRef]:
@@ -142,7 +165,8 @@ def read_grafted(path: Path) -> OrderedDict[str, GraftedEntry]:
         if len(f) < 4:
             continue
         entry = GraftedEntry(
-            ScionRef.parse(f[0], f[1], f[2]), f[3], f[4] if len(f) > 4 else ""
+            ScionRef.parse(f[0], f[1], f[2]), f[3], f[4] if len(f) > 4 else "",
+            f[5] if len(f) > 5 else "",
         )
         entries[entry.ref.key] = entry
     return entries
