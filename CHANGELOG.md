@@ -1,5 +1,41 @@
 # Journal des modifications
 
+## 0.6.0.0
+
+Nouveau format facultatif `.scion.projections`, 6ᵉ colonne facultative de
+`.scion.grafted.list`. Un rootstock sans projection se comporte exactement comme
+en 0.5.4.0 : mêmes liens, mêmes messages, mêmes codes de retour, même liste
+greffée. Spécification : `doc/projection-miroir.md`, partie A.
+
+### Nouveautés
+
+- **Projection d'un dépôt tiers.** Un dépôt sans répertoire `scion/` se greffe
+  par des lignes `shelf nom motif destination` (inclusion) ou `shelf nom !motif`
+  (exclusion) de `.scion.projections`. Les motifs portent sur la liste git du
+  commit épinglé (`git ls-tree`), jamais sur le disque : un fichier non suivi
+  n'est jamais projeté, un sous-module jamais, un lien committé l'est comme une
+  feuille. Formes `d/**`, `d/*`, jokers dans le dernier segment, fichier. Une
+  destination terminée par `/` remplace la base du motif ; sans `/`, elle
+  renomme un fichier.
+- **Erreurs explicites.** Ligne mal formée, motif ou exclusion sans
+  correspondance, deux sources vers un même chemin, fichier contre répertoire,
+  collision de casse dans le trunk (sur tout système) : code 1, toutes les
+  erreurs d'une clé ensemble, chacune avec fichier et numéro de ligne.
+- **Version épinglée.** Une clé projetée a pour version un tag ou un commit
+  complet ; une branche, `*` et `?` sont refusés. Clone partiel
+  (`--filter=blob:none --no-checkout`, puis `HEAD` détaché) sous
+  `depots/<shelf>/<prefix>/<version>`. Un clone qui n'est pas à son commit, ou
+  qui a des fichiers suivis modifiés, arrête la greffe avant le dégreffage. Un
+  tag déplacé dans l'amont arrête `graft-update`, `seed-update` et `seed-add` ;
+  un commit absent du clone est cherché par `git fetch origin`.
+- **Scion porteur.** Un scion dont `scion/.scion/` contient un
+  `.scion.projections` déclare les projections dont il dépend ; elles entrent
+  dans la liste greffée avec, en 6ᵉ colonne, ce `.scion/`. Elles suivent le
+  porteur quand `graft-update` l'avance, et sont retirées avec lui par
+  `graft-remove`, ou quand il ne les déclare plus.
+- `rootstock-information` affiche `scions projected: k` quand k > 0 ; `-v`
+  détaille, par ligne de projection, le nombre de fichiers et les exclusions.
+
 ## 0.5.4.0
 
 Changement de comportement de `graft-update`, `seed-update`, `seed-add` et
