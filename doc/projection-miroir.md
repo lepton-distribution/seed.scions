@@ -243,16 +243,20 @@ fil de l'eau.
 <url du miroir>   <url de l'amont>
 ```
 
-- **M-D1.** Le fichier se trouve dans un `.scion/` : celui d'une graine ou d'un porteur. Il sert
-  au `.scion/` qui déclare une source pointant vers ce miroir.
+- **M-D1.** Le fichier se trouve dans un `.scion/` : celui d'une graine ou d'un porteur (au sens
+  de P-C3 : un `.scion/` de scion qui a un `.scion.projections`). Il sert au `.scion/` qui déclare
+  une source pointant vers ce miroir. Un miroir qu'aucune source ne désigne est admis, sans
+  message : il peut être rempli avant que les graines y pointent.
 - **M-D2.** Le dépôt d'une clé se déclare par l'URL de son **miroir** dans `.scion.sources.list`.
   La greffe ne lit jamais `.scion.mirrors` : la graine ne dépend que du miroir.
 - **M-D3.** Une ligne non vide qui n'a pas exactement 2 champs, ou dont un champ n'est pas une URL
   distante, est une erreur (fichier, numéro de ligne).
 - **M-D4.** Un même miroir associé à deux amonts différents, dans un ou plusieurs `.scion/`, est
-  une erreur.
+  une erreur. Un même amont peut avoir plusieurs miroirs.
 - **M-D5.** Quand le clonage ou le contrôle d'une version échoue sur une URL déclarée comme miroir,
-  le message suggère `scion mirror-sync`.
+  le message suggère `scion mirror-sync`. Pour cela seulement, la greffe lit le `.scion.mirrors`
+  du `.scion/` qui déclare la source, sans contrôle (une ligne mal formée y est ignorée) ; elle n'en
+  tire jamais une URL. Échecs concernés : clonage, version, tag ou commit introuvable.
 
 ### B.2 Commande `mirror-sync`
 
@@ -261,18 +265,25 @@ scion mirror-sync [rootstock] [--seed <graine>] [--dry-run] [<url du miroir>…]
 ```
 
 - **M-C1.** Miroirs traités : ceux des `.scion.mirrors` de la graine (`--seed`) ou de toutes les
-  graines de la liste greffée, et des porteurs greffés. Si des URL sont données, seules celles-là
-  sont traitées. Une URL inconnue est une erreur, signalée avant tout traitement.
-- **M-C2.** Dépôt de travail : `depots/.mirrors/<hôte>/<chemin>` (tiré de l'URL du miroir), créé par
-  `git clone --mirror <miroir>`, puis rafraîchi par `git fetch`. Les références de l'amont sont
-  rapatriées dans un espace séparé (`refs/amont/heads/*`, `refs/amont/tags/*`), jamais sur celles du
-  miroir.
+  graines de la liste greffée, et des porteurs greffés (avec `--seed` : ceux qui viennent de cette
+  graine). Si des URL sont données, seules celles-là sont traitées. Une URL inconnue est un usage
+  incorrect (code 2), signalé avant tout accès réseau, toutes les URL inconnues ensemble.
+- **M-C2.** Dépôt de travail : `depots/.mirrors/<hôte>/<chemin>` (tiré de l'URL du miroir : hôte
+  sans utilisateur ni port, chemin tel quel), créé par `git clone --mirror <miroir>`, puis rafraîchi
+  par `git fetch`. `remote.origin.mirror` y est retiré et les refspecs de `origin` sont restreints
+  aux branches et aux tags. Les références de l'amont sont rapatriées dans un espace séparé
+  (`refs/amont/heads/*`, `refs/amont/tags/*`, remote `amont`, `--prune` : la purge ne touche que
+  cet espace local), jamais sur celles du miroir.
 - **M-C3.** Seules les branches (`refs/heads/*`) et les tags (`refs/tags/*`) sont traités.
-- **M-C4.** Envoi : `git push <miroir>` de références nommées une à une, jamais `--force`,
-  `--mirror`, `--prune`, ni suppression. scion n'emploie que l'authentification git de l'utilisateur.
+- **M-C4.** Envoi : un `git push --porcelain <url du miroir>` par miroir, qui nomme chaque
+  référence (`refs/amont/heads/B:refs/heads/B`, `refs/amont/tags/T:refs/tags/T`) ; jamais `+`,
+  `--force`, `--mirror`, `--prune`, `--atomic`, ni suppression. Une référence refusée par le serveur
+  est un signalement ; les autres sont envoyées. scion n'emploie que l'authentification git de
+  l'utilisateur (par exemple `url.<ssh>.pushInsteadOf`), et n'en règle aucune.
 - **M-C5.** scion ne crée jamais de dépôt distant. Un miroir inaccessible est signalé ; les autres
   sont traités.
-- **M-C6.** `--dry-run` : tout est calculé et rapporté, rien n'est envoyé.
+- **M-C6.** `--dry-run` : tout est calculé et rapporté, rien n'est envoyé. Le dépôt de travail
+  local est créé ou rafraîchi.
 
 ### B.3 Règles par référence
 
@@ -281,16 +292,19 @@ scion mirror-sync [rootstock] [--seed <graine>] [--dry-run] [<url du miroir>…]
 | **M-R1** branche absente du miroir | envoyée | info |
 | **M-R2** branche du miroir ancêtre de celle de l'amont | envoyée (avance rapide) | info |
 | **M-R3** branche identique | rien | `-v` |
-| **M-R4** branche réécrite (le miroir n'est pas ancêtre) | **non envoyée** | signalement |
+| **M-R4** branche réécrite, ou miroir en avance (le miroir n'est pas ancêtre) | **non envoyée** | signalement |
 | **M-R5** branche supprimée dans l'amont | conservée dans le miroir | signalement |
 | **M-R6** tag absent du miroir | envoyé | info |
 | **M-R7** tag identique (même objet) | rien | `-v` |
-| **M-R8** tag déplacé (objet différent) | **non propagé** | signalement (deux commits) |
+| **M-R8** tag déplacé (objet différent, même s'il désigne le même commit) | **non propagé** | signalement (deux commits) |
 | **M-R9** tag supprimé dans l'amont | conservé dans le miroir | signalement |
 
 - **M-K1.** Code 0 : aucun signalement. Code 1 : au moins un signalement (M-R4, M-R5, M-R8, M-R9,
-  miroir inaccessible) ou une erreur de déclaration. Code 2 : échec git inattendu, ou usage
-  incorrect. Le bilan final compte les références envoyées et les signalements par miroir.
+  miroir ou amont inaccessible, référence refusée par le serveur) ou une erreur de déclaration.
+  Code 2 : échec git local inattendu, ou usage incorrect. Le bilan final compte, par miroir, les
+  références envoyées (« à envoyer » avec `--dry-run`) et les signalements. M-R5 et M-R9 se
+  répètent à chaque passe : le dépôt de travail ne distingue pas une référence supprimée en amont
+  d'une référence ajoutée au seul miroir, et rien ne les acquitte.
 - **M-K2.** Rien n'est jamais supprimé ni réécrit dans un miroir.
 
 ## C. Hors périmètre
