@@ -1,5 +1,32 @@
 # Journal des modifications
 
+## 0.6.1.0
+
+Nouveau format facultatif `.scion.mirrors`, nouvelle commande `mirror-sync`. Un
+rootstock sans `.scion.mirrors` se comporte exactement comme en 0.6.0.0.
+Spécification : `doc/projection-miroir.md`, partie B.
+
+### Nouveautés
+
+- **Miroir de conservation.** `.scion.mirrors`, dans le `.scion/` d'une graine
+  ou d'un porteur : lignes `<url du miroir> <url de l'amont>`. Ligne mal formée,
+  URL locale, miroir associé à deux amonts : erreur (code 1) avec fichier et
+  ligne.
+- **`scion mirror-sync [rootstock] [--seed CHEMIN] [--dry-run] [URL…]`.** Dépôt
+  de travail nu `depots/.mirrors/<hôte>/<chemin>` : références du miroir dans
+  `refs/heads` et `refs/tags`, de l'amont dans `refs/amont/*`. Branches et tags
+  seulement ; branche nouvelle ou en avance rapide et tag nouveau envoyés ; branche
+  réécrite (ou miroir en avance), tag déplacé (même recréé sur le même commit),
+  référence supprimée dans l'amont : signalés, jamais propagés. Un seul
+  `git push --porcelain` par miroir, chaque référence nommée, jamais forcé ni
+  destructif ; une référence refusée par le serveur est signalée. Miroir ou
+  amont inaccessible : signalé, les autres miroirs traités. Codes : 0 sans
+  signalement, 1 avec, 2 pour une URL non déclarée (vérifiée avant tout accès
+  réseau) ou un échec git local.
+- **Suggestion de la greffe.** Quand le clonage d'une URL déclarée comme miroir,
+  ou la recherche de sa version, échoue, le message suggère `scion mirror-sync`.
+  La greffe ne lit `.scion.mirrors` que pour cela.
+
 ## 0.6.0.0
 
 Nouveau format facultatif `.scion.projections`, 6ᵉ colonne facultative de

@@ -143,6 +143,30 @@ def remote_tag_commit(dest: Path, name: str) -> str | None:
     return found.get(f"refs/tags/{name}^{{}}") or found.get(f"refs/tags/{name}")
 
 
+def is_ancestor(dest: Path, ancestor: str, descendant: str) -> bool:
+    """Whether ``ancestor`` is an ancestor of ``descendant`` (or the same commit)."""
+    try:
+        run(["merge-base", "--is-ancestor", ancestor, descendant], cwd=dest)
+    except GitError:
+        return False
+    return True
+
+
+def refs(dest: Path, prefix: str) -> dict[str, tuple[str, str]]:
+    """Branches and tags under ``prefix``: ``heads/x`` or ``tags/x`` -> (object, commit).
+
+    The object is the tag object for an annotated tag; the commit is what it
+    designates.
+    """
+    found: dict[str, tuple[str, str]] = {}
+    out = run(["for-each-ref", "--format=%(objectname)%00%(*objectname)%00%(refname)",
+               f"{prefix}heads", f"{prefix}tags"], cwd=dest)
+    for line in out.splitlines():
+        obj, peeled, name = line.split("\0")
+        found[name[len(prefix):]] = (obj, peeled or obj)
+    return found
+
+
 def commit(dest: Path, rev: str = "HEAD") -> str:
     return run(["rev-parse", "--verify", f"{rev}^{{commit}}"], cwd=dest).strip()
 
