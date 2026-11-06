@@ -143,6 +143,8 @@ scion graft-remove [--purge] [--force] shelf@prefix::suffix
 scion ungraft [--force]               vide le trunk
 scion graft-clean [--force]           vide le trunk et oublie la liste greffée
 scion graft-update                    avance tous les seeds et leurs clones, puis regreffe
+scion mirror-sync [--seed CHEMIN] [--dry-run] [URL ...]
+                                      avance les miroirs déclarés (avance rapide seulement)
 scion git --key shelf@prefix::suffix --args "..."
                                       exécute git dans le dépôt d'un scion
 ```
@@ -154,7 +156,8 @@ portant `.scion.rootstock.signature`. `--trunk` nomme le trunk lorsqu'il y en a
 plusieurs. `-v` passe le journal en mode détaillé.
 
 Codes de retour : `0` succès, `1` erreur d'utilisation ou de configuration,
-`2` échec d'une commande git.
+`2` échec d'une commande git. `mirror-sync` : `1` dès qu'une référence est
+signalée, `2` pour un miroir non déclaré donné en argument (ci-dessous).
 
 ## Layout d'un rootstock
 
@@ -274,6 +277,48 @@ retirée à la synchronisation suivante.
 
 Un rootstock sans aucun `.scion.projections` se comporte exactement comme en
 0.5.4.0.
+
+## Miroir de conservation (0.6.1.0)
+
+Un **miroir** est un dépôt distant que l'on contrôle, copie d'un amont tiers,
+et que les graines désignent à la place de l'amont : il garde les commits
+épinglés même si l'amont disparaît, réécrit son historique ou déplace un tag.
+Spécification : [`doc/projection-miroir.md`](doc/projection-miroir.md), partie B.
+
+Les miroirs se déclarent dans un `.scion/` de graine ou de porteur, à côté de la
+ligne de sources qui désigne le miroir :
+
+```
+# .scion.mirrors : <url du miroir> <url de l'amont>
+https://example.org/mirrors/vendor-hal.git   https://example.org/vendor/vendor-hal.git
+```
+
+`scion mirror-sync` traite les miroirs des graines de la liste greffée et de
+leurs porteurs (ou ceux d'une graine avec `--seed`, ou seulement les URL
+données). Pour chacun, dans `depots/.mirrors/<hôte>/<chemin>` :
+
+| Amont comparé au miroir | Action |
+| --- | --- |
+| branche ou tag absent du miroir | envoyé |
+| branche en avance rapide | envoyée |
+| identique | rien (`-v`) |
+| branche réécrite, ou miroir en avance | **non envoyée**, signalée |
+| tag déplacé (autre objet) | **non propagé**, signalé avec les deux commits |
+| branche ou tag supprimé dans l'amont | conservé dans le miroir, signalé à chaque passe |
+
+- Seules les branches et les tags sont traités. Chaque référence est envoyée
+  par son nom, jamais `--force`, `--mirror`, `--prune` ni suppression : rien
+  n'est jamais supprimé ni réécrit dans un miroir.
+- scion ne crée aucun dépôt distant et ne règle aucune authentification : celle
+  de git s'applique (par exemple
+  `git config --global url."ssh://git@github.com/".pushInsteadOf "https://github.com/"`).
+- `--dry-run` calcule et rapporte sans rien envoyer.
+- Code `0` sans signalement, `1` avec au moins un signalement (miroir ou amont
+  inaccessible compris) ou une déclaration incorrecte, `2` pour une URL non
+  déclarée ou un échec git local.
+- La greffe ne lit jamais `.scion.mirrors` pour choisir une URL ; quand le
+  clonage d'un miroir ou sa version échoue, le message suggère
+  `scion mirror-sync`.
 
 ## Utilisation
 
