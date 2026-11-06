@@ -73,6 +73,45 @@ def clone(url: str, dest: Path, version: str = "master", single_branch: bool = F
     run(["checkout", version], cwd=dest)
 
 
+def clone_partial(url: str, dest: Path) -> None:
+    """Clone ``url`` into ``dest`` without blobs nor checkout; the caller checks out."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    run(["clone", "--quiet", "--filter=blob:none", "--no-checkout", url, str(dest)])
+
+
+def checkout_detached(dest: Path, commit_id: str) -> None:
+    run(["checkout", "--quiet", "--detach", commit_id], cwd=dest)
+
+
+def is_full_sha(version: str) -> bool:
+    """Whether ``version`` is a complete commit id: 40 hexadecimal characters."""
+    return len(version) == 40 and all(c in "0123456789abcdefABCDEF" for c in version)
+
+
+def has_commit(dest: Path, commit_id: str) -> bool:
+    try:
+        run(["cat-file", "-e", f"{commit_id}^{{commit}}"], cwd=dest)
+    except GitError:
+        return False
+    return True
+
+
+def fetch_origin(dest: Path) -> None:
+    """Fetch every branch and tag of ``origin``."""
+    run(["fetch", "--quiet", "--tags", "origin"], cwd=dest)
+
+
+def ls_tree(dest: Path, rev: str) -> list[tuple[str, str]]:
+    """``(mode, path)`` of every entry of ``rev``, recursively, paths exact."""
+    found = []
+    for record in run(["ls-tree", "-r", "-z", "--full-tree", rev], cwd=dest).split("\0"):
+        if not record:
+            continue
+        meta, _, path = record.partition("\t")
+        found.append((meta.split(" ", 1)[0], path))
+    return found
+
+
 def current_branch(dest: Path) -> str | None:
     """The branch checked out in ``dest``; ``None`` on a detached ``HEAD``."""
     return run(["branch", "--show-current"], cwd=dest).strip() or None
