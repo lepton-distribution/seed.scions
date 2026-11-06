@@ -18,6 +18,7 @@ RAMIFICATIONS = ".scion.ramifications"
 SOURCES_LIST = ".scion.sources.list"
 GRAFTED_LIST = ".scion.grafted.list"
 PROJECTIONS = ".scion.projections"
+MIRRORS = ".scion.mirrors"
 
 _WHITESPACE = re.compile(r"[ \t\n]+")
 

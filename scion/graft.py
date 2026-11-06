@@ -13,9 +13,8 @@ import os
 import shutil
 from collections import OrderedDict
 from pathlib import Path
-from urllib.parse import urlparse
 
-from . import gitops
+from . import gitops, mirror
 from .errors import GitError, ScionError
 from .model import (
     GRAFTED_LIST,
@@ -44,8 +43,7 @@ from .rootstock import HIDDEN_DIR, STEM_DIR, Rootstock, relative_link
 log = logging.getLogger(__name__)
 
 
-def is_remote(location: str) -> bool:
-    return bool(urlparse(location).netloc)
+is_remote = mirror.is_remote
 
 
 # --------------------------------------------------------------------------
@@ -67,9 +65,9 @@ def sync(rootstock: Rootstock, seed_dot_scion: Path, single_branch: bool = False
     dot = Path(seed_dot_scion).resolve()
     entries = read_grafted(rootstock.grafted_list)
     wanted = _wanted(rootstock, dot, entries)
-    _fetch(wanted, single_branch)
+    _fetch(rootstock, wanted, single_branch)
     carried, carried_keys = _carried(rootstock, dot, entries)
-    _fetch(carried, single_branch)
+    _fetch(rootstock, carried, single_branch)
     _forget_uncarried(rootstock, dot, entries, carried_keys)
     for entry, _, clone_dir, projected in wanted + carried:
         if projected:
@@ -259,28 +257,39 @@ def _check_shared_clones(rootstock: Rootstock, entries) -> None:
         raise ScionError("\n".join(errors))
 
 
-def _remote_clones(wanted) -> OrderedDict[str, tuple[str, str, bool]]:
-    """Each distinct clone of a remote scion: URL, declared version, projected."""
-    seen: OrderedDict[str, tuple[str, str, bool]] = OrderedDict()
+def _remote_clones(wanted) -> OrderedDict[str, tuple[str, str, bool, GraftedEntry]]:
+    """Each distinct clone of a remote scion: URL, declared version, projected, entry."""
+    seen: OrderedDict[str, tuple[str, str, bool, GraftedEntry]] = OrderedDict()
     for entry, url, clone_dir, projected in wanted:
         if url:
-            seen.setdefault(clone_dir, (url, entry.ref.version, projected))
+            seen.setdefault(clone_dir, (url, entry.ref.version, projected, entry))
     return seen
 
 
-def _fetch(wanted, single_branch: bool) -> None:
+def _mirror_hint(rootstock: Rootstock, entry: GraftedEntry, url: str) -> str:
+    """M-D5: the ``mirror-sync`` suggestion when ``url`` is a declared mirror."""
+    return mirror.hint(rootstock.resolve(entry.declared_in), url)
+
+
+def _fetch(rootstock: Rootstock, wanted, single_branch: bool) -> None:
     """Clone each missing repository exactly once."""
-    for clone_dir, (url, version, projected) in _remote_clones(wanted).items():
+    for clone_dir, (url, version, projected, entry) in _remote_clones(wanted).items():
         destination = Path(clone_dir)
         if (destination / ".git").exists():
             continue
-        if not projected:
-            gitops.clone(url, destination, version, single_branch)
-            continue
-        gitops.clone_partial(url, destination)
+        suggestion = _mirror_hint(rootstock, entry, url)
+        try:
+            if not projected:
+                gitops.clone(url, destination, version, single_branch)
+                continue
+            gitops.clone_partial(url, destination)
+        except GitError as exc:
+            if not suggestion:
+                raise
+            raise GitError(f"{exc}{suggestion}", exc.stdout, exc.stderr) from exc
         pinned, fault = _pinned(destination, version)
         if fault:
-            raise ScionError(f"{destination} : {fault} (clone laissé en place)")
+            raise ScionError(f"{destination} : {fault} (clone laissé en place){suggestion}")
         gitops.checkout_detached(destination, pinned)
 
 
@@ -339,17 +348,18 @@ def clone_updates(rootstock: Rootstock, seed_dots, checked: set[str] | None = No
         entries = read_grafted(rootstock.grafted_list)
         wanted = _wanted(rootstock, Path(dot).resolve(), entries)
         wanted += _carried(rootstock, Path(dot).resolve(), entries)[0]
-        for clone_dir, (_, version, projected) in _remote_clones(wanted).items():
+        for clone_dir, (url, version, projected, entry) in _remote_clones(wanted).items():
             if clone_dir in checked:
                 continue
             checked.add(clone_dir)
             destination = Path(clone_dir).resolve()
             if not (destination / ".git").exists():
                 continue
+            suggestion = _mirror_hint(rootstock, entry, url)
             if projected:
-                fault, late = _check_projected_clone(destination, version), False
+                fault, late = _check_projected_clone(destination, version, suggestion), False
             else:
-                fault, late = _check_clone(destination, version)
+                fault, late = _check_clone(destination, version, suggestion)
             if fault:
                 faults.append(fault)
             elif late:
@@ -362,8 +372,11 @@ def clone_updates(rootstock: Rootstock, seed_dots, checked: set[str] | None = No
     return behind
 
 
-def _check_clone(clone: Path, version: str) -> tuple[str | None, bool]:
-    """``(fault, behind)`` for one clone and its declared version."""
+def _check_clone(clone: Path, version: str, suggestion: str = "") -> tuple[str | None, bool]:
+    """``(fault, behind)`` for one clone and its declared version.
+
+    ``suggestion`` completes the message of a version the clone lacks (M-D5).
+    """
     branch = gitops.current_branch(clone)
     where = f"branche « {branch} »" if branch else f"HEAD détaché sur {gitops.head(clone)}"
     if gitops.is_branch(clone, version):
@@ -386,7 +399,8 @@ def _check_clone(clone: Path, version: str) -> tuple[str | None, bool]:
         return None, bool(late)
     tagged = gitops.tag_commit(clone, version)
     if tagged is None:
-        return f"{clone} : version déclarée « {version} » introuvable dans le clone", False
+        return (f"{clone} : version déclarée « {version} » introuvable dans le clone"
+                f"{suggestion}"), False
     if gitops.commit(clone) != tagged:
         return (f"{clone} : {where}, version déclarée : tag « {version} » ; "
                 f"git -C {clone} switch --detach {version}"), False
@@ -399,7 +413,7 @@ def _check_clone(clone: Path, version: str) -> tuple[str | None, bool]:
     return None, False
 
 
-def _check_projected_clone(clone: Path, version: str) -> str | None:
+def _check_projected_clone(clone: Path, version: str, suggestion: str = "") -> str | None:
     """The fault of a projected scion's clone, ``None`` if it is at its version.
 
     It never moves: its version is a tag, which must not have moved in
@@ -409,7 +423,7 @@ def _check_projected_clone(clone: Path, version: str) -> str | None:
         gitops.fetch_origin(clone)
     pinned, fault = _pinned(clone, version)
     if fault:
-        return f"{clone} : {fault}"
+        return f"{clone} : {fault}{suggestion}"
     if gitops.commit(clone) != pinned:
         return (f"{clone} : HEAD sur {gitops.head(clone)}, version déclarée « {version} » ; "
                 f"git -C {clone} checkout --detach {version}")
