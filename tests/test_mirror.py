@@ -398,6 +398,8 @@ class TestReferences(MirrorCase):
         self.assertEqual(refs(self.mirror), self.before)
         self.assertTrue(any("master" in line and "non envoyée" in line for line in output),
                         output)
+        self.assertTrue(any("0 référence(s) envoyée(s), 1 signalement(s)" in line
+                            for line in output), output)
 
     def test_miroir_en_avance_non_envoye(self):
         """M-R4 (PA-67 E8): a mirror ahead of its upstream is reported too."""
@@ -431,6 +433,9 @@ class TestReferences(MirrorCase):
         line = next(line for line in output if "v1.0" in line and "non propagé" in line)
         self.assertIn(self.first[:7], line)
         self.assertIn(self.second[:7], line)
+        # reported only: no push is even attempted for it
+        self.assertTrue(any("0 référence(s) envoyée(s), 1 signalement(s)" in line
+                            for line in output), output)
 
     def test_tag_recree_meme_commit_non_propage(self):
         """M-R8 (PA-67 E7): another tag object on the same commit is a moved tag."""
