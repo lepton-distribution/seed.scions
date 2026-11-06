@@ -189,3 +189,68 @@ def real_paths(trunk: Path, base: Path) -> set[str]:
                 continue
             found.add(str((Path(dirpath) / name).resolve().relative_to(base)))
     return found
+
+
+# --------------------------------------------------------------------------
+# a third-party repository, without scion/, for projections
+# --------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Tiers:
+    """A repository without ``scion/`` and the commits its tests pin."""
+
+    path: Path
+    first: str    # tagged v1.0 (annotated)
+    second: str   # tagged v2.0 (lightweight), master
+    dev: str      # head of the branch dev, untagged
+
+    @property
+    def url(self) -> str:
+        return _url(self.path)
+
+
+def _head(repo: Path) -> str:
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+def build_tiers(path: Path) -> Tiers:
+    """Files, a committed symlink, a submodule entry, a name with a blank, tags."""
+    for name, text in {
+        "Inc/a.h": "a\n", "Inc/b.h": "b\n", "Inc/.keep": "", "Inc/sub/c.h": "c\n",
+        "Inc/vendor_a1.h": "va\n", "Inc/vendor_b1.h": "vb\n", "Inc/vendor_c1.h": "vc\n",
+        "Src/x.c": "x\n", "Src/deep/y.c": "y\n", "LICENSE.md": "licence\n",
+        "README.md": "lisez-moi\n", "docs/Add file.txt": "blanc\n", "cfg/.scion/x.txt": "x\n",
+    }.items():
+        _write(path / name, text)
+    (path / "Inc/link.h").symlink_to("a.h")
+    _make_repo(path)
+    # a submodule is a commit entry of the tree: made without any network
+    _git(path, "update-index", "--add", "--cacheinfo", f"160000,{_head(path)},Src/mod")
+    _git(path, "commit", "-qm", "submodule")
+    first = _head(path)
+    _git(path, "tag", "-a", "v1.0", "-m", "v1.0")
+    _write(path / "Src/z.c", "z\n")
+    _git(path, "add", "-A")
+    _git(path, "commit", "-qm", "second")
+    second = _head(path)
+    _git(path, "tag", "v2.0")
+    _git(path, "switch", "-q", "-c", "dev", first)
+    _write(path / "Src/dev.c", "dev\n")
+    _git(path, "add", "-A")
+    _git(path, "commit", "-qm", "dev")
+    dev = _head(path)
+    _git(path, "switch", "-q", "master")
+    return Tiers(path, first, second, dev)
+
+
+def make_repo(path: Path, files: dict[str, str]) -> str:
+    """A git repository holding ``files``; returns its ``file://localhost`` URL."""
+    for name, text in files.items():
+        _write(path / name, text)
+    _make_repo(path)
+    return _url(path)
+
+
+def commit_all(path: Path, message: str = "update") -> None:
+    _git(path, "add", "-A")
+    _git(path, "commit", "-qm", message)
