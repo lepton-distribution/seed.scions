@@ -1,5 +1,17 @@
 # Journal des modifications
 
+## 0.6.2.0
+
+Correctif de la projection. Spécification : `doc/projection-miroir.md`, règle P-G6.
+
+### Corrections
+
+- **`graft --scion <porteur>` regreffe aussi ses clés projetées** (P-G6), et le
+  dit par un message. C'est le pendant de P-P6 (`graft-remove <porteur>`). En 0.6.1.0, après
+  `graft-remove`, `seed-clone` puis `graft --scion <porteur>`, les clés projetées
+  étaient réinscrites dans la liste greffée sans aucun lien dans le trunk.
+  `graft --scion <clé projetée>` ne change pas (P-G5).
+
 ## 0.6.1.0
 
 Nouveau format facultatif `.scion.mirrors`, nouvelle commande `mirror-sync`. Un

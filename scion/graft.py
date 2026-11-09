@@ -979,6 +979,13 @@ def _drop_tolerated(directory: Path, patterns: list[str]) -> None:
 # --------------------------------------------------------------------------
 # one scion at a time
 # --------------------------------------------------------------------------
+def _carried_entries(rootstock: Rootstock, entry: GraftedEntry, entries) -> list[GraftedEntry]:
+    """The projected scions ``entry`` carries: those whose sixth column is its ``.scion/``."""
+    carrier = rootstock.store(_carrier_dot(rootstock, entry))
+    return [other for other in entries.values()
+            if other.carrier == carrier and other.ref.key != entry.ref.key]
+
+
 def _entry(entries, key: str) -> GraftedEntry:
     """Look a scion up by ``shelf@name``, the form ``scion git --key`` uses."""
     entry = entries.get(key.replace("@", "/", 1))
@@ -1072,9 +1079,17 @@ def graft_scions(rootstock: Rootstock, keys: list[str], force: bool = False) -> 
     Their links are removed and created again from their current content. On
     conflict with another scion, the call is undone and the old links come back.
     A projected scion is resolved and its clone checked before anything moves.
+    A carrier brings the projected scions it carries (P-G6).
     """
     entries = read_grafted(rootstock.grafted_list)
     chosen = [_entry(entries, key) for key in keys]
+    for entry in list(chosen):
+        carried = [other for other in _carried_entries(rootstock, entry, entries)
+                   if other not in chosen]
+        if carried:
+            chosen += carried
+            log.info("clés projetées regreffées avec leur porteur %s : %s", entry.ref.key,
+                     ", ".join(other.ref.key for other in carried))
     rootstock.trunk.mkdir(parents=True, exist_ok=True)
     _check_stray(rootstock, force)
     chosen_keys = {entry.ref.key for entry in chosen}
@@ -1101,9 +1116,7 @@ def remove(rootstock: Rootstock, key: str, purge: bool = False, force: bool = Fa
     """
     entries = read_grafted(rootstock.grafted_list)
     entry = _entry(entries, key)
-    carrier = rootstock.store(_carrier_dot(rootstock, entry))
-    carried = [other for other in entries.values()
-               if other.carrier == carrier and other.ref.key != entry.ref.key]
+    carried = _carried_entries(rootstock, entry, entries)
     clone = _purgeable_clone(rootstock, entry, entries) if purge else None
     _check_stray(rootstock, force)
     projected, tables = _projections(rootstock, entries, strict=set())

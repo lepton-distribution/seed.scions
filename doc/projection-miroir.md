@@ -7,8 +7,8 @@ Spécification. Aucune ligne de code ne la précède. Elle décrit deux évoluti
 - **B. Miroir de conservation** : tenir à jour, par avance rapide seulement, une copie d'un dépôt
   tiers que l'on contrôle, et y faire pointer les graines.
 
-Versions : la première des deux livrée est **0.6.0.0**, la seconde **0.6.1.0**. Chaque règle porte un
-identifiant (`P-…`, `M-…`) repris par le plan de tests.
+Versions : la première des deux livrée est **0.6.0.0**, la seconde **0.6.1.0**. Correctif **0.6.2.0** :
+règle P-G6. Chaque règle porte un identifiant (`P-…`, `M-…`) repris par le plan de tests.
 
 ## 0. Vocabulaire
 
@@ -212,6 +212,10 @@ fil de l'eau.
   git l'a déjà exclu.
 - **P-G5.** `graft --scion <clé projetée>` relit ses lignes de projection et regreffe la clé seule ;
   le reste du trunk est conservé (règles de 0.5.1.0).
+- **P-G6** (0.6.2.0). `graft --scion <porteur>` regreffe aussi les clés projetées que porte le
+  porteur (6ᵉ colonne de la liste greffée), et le dit. C'est le pendant de P-P6. Avant 0.6.2.0, ces
+  clés restaient dans la liste greffée sans aucun lien après `graft-remove`, `seed-clone` puis
+  `graft --scion <porteur>` (constat d'ENV-44 du chantier Lepton, D1).
 
 ### A.11 Commandes touchées
 
@@ -219,7 +223,7 @@ fil de l'eau.
 | --- | --- |
 | `seed-add`, `seed-clone` | clonent aussi les clés projetées de la graine et des porteurs (P-P3, P-V2) |
 | `seed-update`, `graft-update` | contrôlent et avancent comme en 0.5.4.0, puis relisent les porteurs (P-P5, P-P7) ; contrôles P-V4 |
-| `graft` (complet, `--scion`) | résolution P-R*, casse P-K2, état du clone P-E1, conflits P-G2 ; trunk rétabli en cas d'échec |
+| `graft` (complet, `--scion`) | résolution P-R*, casse P-K2, état du clone P-E1, conflits P-G2 ; trunk rétabli en cas d'échec ; `--scion <porteur>` : P-G6 |
 | `graft-remove [--purge]` | P-G3, P-P6 |
 | `ungraft`, `graft-clean` | inchangés |
 | `seed-scion-add`, `seed-scion-remove` | inchangés ; aucune commande n'écrit `.scion.projections` (édition à la main) |

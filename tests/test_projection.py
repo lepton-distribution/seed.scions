@@ -593,6 +593,44 @@ class TestCarriers(CarrierCase):
         self.assertNotIn("inc/a.h", self.links())
         self.assertTrue(self.clone().is_dir())
 
+    def test_graft_scion_porteur_greffe_ses_projections(self):
+        # P-G6 (ENV-44) : seed-add inscrit le porteur et ses clés projetées ; graft --scion du
+        # seul porteur lie aussi leurs fichiers (cas de lepton seed add / seed replace).
+        self.seed_with(self.carrier())
+        self.seed_add()
+        with self.assertLogs("scion.graft", level="INFO") as logs:
+            code, _, err = run("graft", "--scion", "own@family", cwd=self.rootstock)
+        self.assertEqual(code, 0, err)
+        self.assertTrue(any(HAL in line and "porteur" in line for line in logs.output))
+        links = self.links()
+        self.assertIn("family/f.c", links)
+        self.assertEqual(links["inc/a.h"], "rootstock/depots/tiers/hal/v1.0/Inc/a.h")
+
+    def test_graft_scion_porteur_apres_graft_remove(self):
+        # P-P6 puis P-G6 : retrait du porteur, réinscription par seed-clone, regreffe du porteur :
+        # le trunk revient à l'identique.
+        self.seed_with(self.carrier())
+        self.seed_add()
+        self.graft()
+        before = self.links()
+        self.assertEqual(run("graft-remove", "own@family", cwd=self.rootstock)[0], 0)
+        code, _, err = run("seed-clone", "--seed", str(self.seed_dir), cwd=self.rootstock)
+        self.assertEqual(code, 0, err)
+        code, _, err = run("graft", "--scion", "own@family", cwd=self.rootstock)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.links(), before)
+
+    def test_graft_scion_projection_seule_porteur_conserve(self):
+        # P-G5 inchangé : la clé projetée seule ne regreffe pas son porteur.
+        self.seed_with(self.carrier())
+        self.seed_add()
+        self.graft()
+        (self.trunk / "family/f.c").unlink()
+        code, _, err = run("graft", "--scion", "tiers@hal", cwd=self.rootstock)
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("family/f.c", self.links())
+        self.assertIn("inc/a.h", self.links())
+
     def test_graft_remove_porteur_retire_ses_projections(self):
         self.seed_with(self.carrier())
         self.seed_add()
