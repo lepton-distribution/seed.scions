@@ -161,7 +161,8 @@ fil de l'eau.
 - **P-V7** (0.6.3.0). Un clone distant de clé projetée (P-V2) est en extraction partielle, au mode
   cône de git (`git sparse-checkout set --cone`). Son **ensemble extrait** est formé de deux
   parties :
-  - les fichiers de la racine du clone, que le mode cône extrait toujours ;
+  - les fichiers placés directement à la racine du clone et dans chaque répertoire ancêtre d'un
+    répertoire de l'ensemble, que le mode cône extrait toujours ;
   - tout le contenu des **répertoires parents des fichiers sources** des tables (§A.6) de toutes
     les clés de la liste greffée qui partagent le clone (P-V2).
 
