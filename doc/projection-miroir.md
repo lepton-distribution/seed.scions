@@ -8,7 +8,8 @@ Spécification. Aucune ligne de code ne la précède. Elle décrit deux évoluti
   tiers que l'on contrôle, et y faire pointer les graines.
 
 Versions : la première des deux livrée est **0.6.0.0**, la seconde **0.6.1.0**. Correctif **0.6.2.0** :
-règle P-G6. Chaque règle porte un identifiant (`P-…`, `M-…`) repris par le plan de tests.
+règle P-G6. Évolution **0.6.3.0** : règle P-V7 (extraction partielle des clones distants). Chaque
+règle porte un identifiant (`P-…`, `M-…`) repris par le plan de tests.
 
 ## 0. Vocabulaire
 
@@ -142,7 +143,8 @@ fil de l'eau.
   Le clone reste alors en place, comme le clone d'une version introuvable en 0.5.4.0.
 - **P-V2.** Emplacement distant : le clone va sous `depots/<shelf>/<prefix>/<version>`, comme pour
   un scion ordinaire. Deux clés de même `prefix` et de même version partagent donc le clone. Il est
-  créé par `git clone --filter=blob:none --no-checkout`, puis `git checkout --detach <version>`.
+  créé par `git clone --filter=blob:none --no-checkout`, mis en extraction partielle sans
+  répertoire (P-V7), puis `git checkout --detach <version>`.
   `--single-branch` est sans effet pour une clé projetée. Un clone partagé entre une clé projetée et
   un scion ordinaire (même `shelf`, `prefix` et version) est une erreur de résolution.
 - **P-V3.** Emplacement local : le chemin doit être un dépôt git, utilisé tel quel, jamais cloné ni
@@ -156,6 +158,41 @@ fil de l'eau.
 - **P-V6.** La règle « un scion déjà greffé dans une version plus récente est conservé » ne
   s'applique pas à une clé projetée : un commit ne se compare pas, et la projection suit son
   `.scion/`. La version déclarée remplace toujours la version greffée.
+- **P-V7** (0.6.3.0). Un clone distant de clé projetée (P-V2) est en extraction partielle, au mode
+  cône de git (`git sparse-checkout set --cone`). Son **ensemble extrait** est formé de deux
+  parties :
+  - les fichiers de la racine du clone, que le mode cône extrait toujours ;
+  - tout le contenu des **répertoires parents des fichiers sources** des tables (§A.6) de toutes
+    les clés de la liste greffée qui partagent le clone (P-V2).
+
+  Un répertoire contenu dans un autre de l'ensemble est omis. L'ensemble se calcule sur les tables,
+  jamais sur le disque. Les autres fichiers de ces répertoires sont extraits aussi, même exclus ou
+  non désignés : ils ne sont jamais liés.
+  - À la création (`seed-add`, `seed-clone`, `seed-update`, `graft-update`), le clone n'extrait
+    que la racine jusqu'à sa première greffe.
+  - À la greffe (`graft`, `graft --scion`, regreffe de `graft-update`), l'extraction se fait en
+    deux temps :
+    1. Après le contrôle P-E1 et avant la pose des liens, l'ensemble est **élargi** à l'union de
+       l'ensemble en place et de l'ensemble calculé : des fichiers s'ajoutent, et aucun ne part.
+    2. Après la greffe réussie, il est **réduit** à l'ensemble calculé.
+
+    Une greffe qui échoue laisse l'ensemble élargi. Le trunk rétabli ne vise donc jamais un
+    fichier non extrait.
+  - Un clone extrait en entier, créé avant 0.6.3.0, est converti par sa prochaine greffe. Les
+    objets déjà reçus restent dans `.git`.
+  - `graft-remove`, `ungraft` et `graft-clean` ne changent pas l'ensemble : il peut rester trop
+    large, sans effet. Un clone qui n'est plus greffé (P-V5, P-P7) reste tel quel.
+  - Un emplacement local (P-V3) n'est jamais mis en extraction partielle.
+  - Les contrôles ne changent pas. P-V4 lit `HEAD` et les tags. P-E1 ne voit pas les fichiers hors
+    de l'ensemble. Les motifs portent sur la liste git (P-M4). Un fichier non suivi reste en place
+    quand son répertoire sort de l'ensemble.
+  - L'extraction partielle écrit `.git/info/sparse-checkout` et la configuration propre au clone
+    (`.git/config.worktree`, extension `worktreeConfig`). Ces fichiers ne s'éditent pas à la main :
+    la greffe suivante les réécrit.
+  - Elle exige git ≥ 2.35. Avec un git plus ancien, c'est une erreur (code 1) qui nomme la version
+    requise, avant tout clonage et toute greffe d'une clé projetée distante.
+  - Un message (niveau info) nomme chaque clone dont l'ensemble change, avec son nombre de
+    répertoires. `-v` liste les répertoires.
 - **P-E1.** Avant toute greffe d'une clé projetée, le clone doit être à son commit épinglé
   (`HEAD`) et sans modification de fichier suivi (`git status --porcelain --untracked-files=no`
   vide). Sinon la greffe s'arrête (code 1, trunk rétabli) et nomme le clone et les fichiers. Les
@@ -221,9 +258,9 @@ fil de l'eau.
 
 | Commande | Effet de la projection |
 | --- | --- |
-| `seed-add`, `seed-clone` | clonent aussi les clés projetées de la graine et des porteurs (P-P3, P-V2) |
-| `seed-update`, `graft-update` | contrôlent et avancent comme en 0.5.4.0, puis relisent les porteurs (P-P5, P-P7) ; contrôles P-V4 |
-| `graft` (complet, `--scion`) | résolution P-R*, casse P-K2, état du clone P-E1, conflits P-G2 ; trunk rétabli en cas d'échec ; `--scion <porteur>` : P-G6 |
+| `seed-add`, `seed-clone` | clonent aussi les clés projetées de la graine et des porteurs (P-P3, P-V2) ; clone extrait à la racine seule (P-V7) |
+| `seed-update`, `graft-update` | contrôlent et avancent comme en 0.5.4.0, puis relisent les porteurs (P-P5, P-P7) ; contrôles P-V4 ; regreffe : P-V7 |
+| `graft` (complet, `--scion`) | résolution P-R*, casse P-K2, état du clone P-E1, conflits P-G2 ; trunk rétabli en cas d'échec ; `--scion <porteur>` : P-G6 ; ensemble extrait élargi avant la pose, réduit après (P-V7) |
 | `graft-remove [--purge]` | P-G3, P-P6 |
 | `ungraft`, `graft-clean` | inchangés |
 | `seed-scion-add`, `seed-scion-remove` | inchangés ; aucune commande n'écrit `.scion.projections` (édition à la main) |
@@ -317,6 +354,8 @@ scion mirror-sync [rootstock] [--seed <graine>] [--dry-run] [<url du miroir>…]
   ordinaire, et la projection les exclut (P-G2). Le format ne dit pas de quel fichier tiers ils
   dérivent.
 - Commandes d'édition de `.scion.projections` et `.scion.mirrors`.
-- `sparse-checkout` du clone tiers.
+- Extraction partielle d'un emplacement local (P-V3) ; extraction partielle au mode non-cône (liste
+  exacte des fichiers) : mode déprécié par git depuis 2.37, qui imposerait d'échapper les chemins
+  (rapport d'ENV-52 du chantier Lepton).
 - Création, visibilité ou suppression des dépôts miroirs.
 - Branche par défaut (`HEAD`) du miroir ; références autres que branches et tags.
