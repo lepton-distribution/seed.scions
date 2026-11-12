@@ -13,9 +13,11 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import make_fixture
 from support import FixtureCase, oracle, run
+from scion import gitops
 from scion.model import read_grafted
 
 HAL = "tiers/hal"
@@ -755,6 +757,168 @@ class TestCommands(ProjectionCase):
             self.graft("-v")
         self.assertTrue(any("fichier(s)" in line and "Inc/*" in line for line in logs.output))
         self.assertTrue(any("exclu Inc/b.h" in line for line in logs.output))
+
+
+# ==========================================================================
+# A.8 P-V7 partial extraction of remote clones (0.6.3.0)
+# ==========================================================================
+ROOT_FILES = {"LICENSE.md", "README.md"}
+
+
+class TestExtractionPartielle(ProjectionCase):
+    """P-V7: a remote clone extracts the root and the parent directories of its sources."""
+
+    def extracted(self, clone: Path | None = None) -> set[str]:
+        """Files on disk in ``clone``, ``.git`` left out."""
+        clone = clone or self.clone()
+        found = set()
+        for dirpath, dirnames, filenames in os.walk(clone):
+            if Path(dirpath) == clone and ".git" in dirnames:
+                dirnames.remove(".git")
+            for name in filenames:
+                found.add(str((Path(dirpath) / name).relative_to(clone)))
+        return found
+
+    def sparse(self, clone: Path | None = None) -> str:
+        return subprocess.run(["git", "config", "--get", "core.sparseCheckout"],
+                              cwd=clone or self.clone(), capture_output=True,
+                              text=True).stdout.strip()
+
+    def cone(self, clone: Path | None = None) -> list[str]:
+        return subprocess.run(["git", "sparse-checkout", "list"], cwd=clone or self.clone(),
+                              capture_output=True, text=True).stdout.splitlines()
+
+    def broken(self) -> list[str]:
+        return sorted(path for path in self.links() if not (self.trunk / path).exists())
+
+    def test_clone_neuf_racine_seule(self):
+        self.seed("tiers hal Inc/* scion/inc/\n")
+        self.seed_add()
+        self.assertEqual(self.sparse(), "true")
+        self.assertEqual(self.cone(), [])
+        self.assertEqual(self.extracted(), ROOT_FILES)
+        self.assertEqual(git(self.clone(), "rev-parse", "HEAD"), self.tiers.first)
+        self.assertEqual(git(self.clone(), "status", "--porcelain", "--untracked-files=no"), "")
+
+    def test_greffe_extrait_les_parents_des_sources(self):
+        self.ready("tiers hal Inc/* scion/inc/\n")
+        self.assertEqual(self.cone(), ["Inc"])
+        inc = {"Inc/a.h", "Inc/b.h", "Inc/.keep", "Inc/link.h", "Inc/sub/c.h",
+               "Inc/vendor_a1.h", "Inc/vendor_b1.h", "Inc/vendor_c1.h"}
+        self.assertEqual(self.extracted(), ROOT_FILES | inc)
+        self.assertNotIn("inc/sub/c.h", self.links())
+        self.assertEqual(self.broken(), [])
+
+    def test_fichiers_des_ancetres_extraits(self):
+        self.ready("tiers hal Src/deep/* scion/src/\n")
+        self.assertEqual(self.cone(), ["Src/deep"])
+        self.assertEqual(self.extracted(), ROOT_FILES | {"Src/x.c", "Src/deep/y.c"})
+        self.assertEqual(sorted(self.links()), ["src/y.c"])
+
+    def test_clone_partage_union_des_tables(self):
+        sources = (f"tiers\thal::inc\tv1.0\t{self.tiers.url}\n"
+                   f"tiers\thal::src\tv1.0\t{self.tiers.url}\n")
+        write(self.dot / ".scion.sources.list", sources)
+        write(self.dot / ".scion.ramifications", "tiers\thal::inc\tv1.0\ntiers\thal::src\tv1.0\n")
+        write(self.dot / ".scion.projections",
+              "tiers hal::inc Inc/* scion/inc/\ntiers hal::src Src/deep/* scion/src/\n")
+        self.seed_add()
+        self.graft()
+        self.assertEqual(self.cone(), ["Inc", "Src/deep"])
+        self.graft("--scion", "tiers@hal::inc")
+        self.assertEqual(self.cone(), ["Inc", "Src/deep"])
+        self.assertEqual(self.broken(), [])
+        code, _, err = run("graft-remove", "tiers@hal::inc", cwd=self.rootstock)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.cone(), ["Inc", "Src/deep"])
+        self.assertEqual(self.broken(), [])
+
+    def test_lignes_changees_ensemble_recalcule(self):
+        self.ready("tiers hal Inc/* scion/inc/\n")
+        self.seed("tiers hal Src/* scion/src/\n")
+        self.graft()
+        self.assertEqual(self.cone(), ["Src"])
+        self.assertNotIn("Inc/a.h", self.extracted())
+        self.assertIn("Src/x.c", self.extracted())
+        self.assertEqual(self.broken(), [])
+
+    def test_greffe_en_echec_ensemble_elargi(self):
+        self.ready("tiers hal Inc/* scion/inc/\n")
+        before = self.state()
+        # src/x.c and Src/y.c differ by case: P-K2 stops the graft once the clone is widened
+        self.seed("tiers hal Src/x.c scion/src/\ntiers hal Src/deep/y.c scion/Src/\n")
+        self.assertIn("casse", self.graft(expect=1))
+        self.assertEqual(self.state(), before)
+        self.assertEqual(self.cone(), ["Inc", "Src"])
+        self.assertEqual(self.broken(), [])
+
+    def test_clone_complet_converti_par_la_greffe(self):
+        self.seed("tiers hal Inc/* scion/inc/\n")
+        clone = self.clone()
+        # a clone made as before 0.6.3.0: the whole tree extracted
+        git(self.base, "clone", "-q", "--filter=blob:none", "--no-checkout", self.tiers.url,
+            str(clone))
+        git(clone, "checkout", "-q", "--detach", "v1.0")
+        self.seed_add()
+        self.assertIn("Src/x.c", self.extracted())
+        err = self.graft()
+        self.assertEqual(self.cone(), ["Inc"])
+        self.assertNotIn("Src/x.c", self.extracted())
+        self.assertEqual(self.broken(), [])
+        self.assertIn(f"{clone} : extraction partielle, 1 répertoire(s)", err)
+
+    def test_message_seulement_si_l_ensemble_change(self):
+        self.seed("tiers hal Inc/* scion/inc/\n")
+        self.seed_add()
+        self.assertIn("extraction partielle", self.graft())
+        self.assertNotIn("extraction partielle", self.graft())
+
+    def test_verbose_liste_les_repertoires(self):
+        self.seed("tiers hal Inc/* scion/inc/\ntiers hal Src/deep/* scion/src/\n")
+        self.seed_add()
+        with self.assertLogs("scion.graft", level="DEBUG") as logs:
+            self.graft("-v")
+        for directory in ("Inc", "Src/deep"):
+            self.assertTrue(any(f"répertoire extrait {directory}" in line
+                                for line in logs.output), logs.output)
+
+    def test_nouvelle_version_clone_partiel(self):
+        self.ready("tiers hal Src/* scion/src/\n")
+        self.seed("tiers hal Src/* scion/src/\n", version="v2.0")
+        code, _, err = run("graft-update", cwd=self.rootstock)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.cone(self.clone("v2.0")), ["Src"])
+        self.assertIn("Src/z.c", self.extracted(self.clone("v2.0")))
+        self.assertNotIn("Inc/a.h", self.extracted(self.clone("v2.0")))
+        self.assertEqual(self.cone(self.clone("v1.0")), ["Src"])
+        self.assertEqual(self.broken(), [])
+
+    def test_non_suivi_reste_quand_son_repertoire_sort(self):
+        self.ready("tiers hal Inc/* scion/inc/\n")
+        write(self.clone() / "Inc/new.h", "n\n")
+        self.seed("tiers hal Src/* scion/src/\n")
+        self.graft()
+        self.assertTrue((self.clone() / "Inc/new.h").exists())
+        self.assertEqual(git(self.clone(), "status", "--porcelain", "--untracked-files=no"), "")
+
+    def test_emplacement_local_jamais_partiel(self):
+        location = str(self.tiers.path)
+        with mock.patch.object(gitops, "version", return_value=(2, 20, 0), create=True):
+            self.ready("tiers hal Src/* scion/src/\n", version=self.tiers.second,
+                       location=location)
+        self.assertEqual(self.sparse(self.tiers.path), "")
+        self.assertTrue((self.tiers.path / "Inc/a.h").exists())
+
+    def test_git_trop_ancien_erreur(self):
+        self.seed("tiers hal Inc/* scion/inc/\n")
+        with mock.patch.object(gitops, "version", return_value=(2, 34, 1), create=True):
+            err = self.seed_add(expect=1)
+        self.assertIn("2.35", err)
+        self.assertFalse(self.clone().exists())
+        self.seed_add()
+        with mock.patch.object(gitops, "version", return_value=(2, 34, 1), create=True):
+            err = self.graft(expect=1)
+        self.assertIn("2.35", err)
 
 
 if __name__ == "__main__":
