@@ -12,13 +12,13 @@ from .errors import GitError
 log = logging.getLogger(__name__)
 
 
-def run(args: list[str], cwd: Path | None = None) -> str:
-    """Run one git command and return its stdout.
+def run(args: list[str], cwd: Path | None = None, input: str | None = None) -> str:
+    """Run one git command and return its stdout; ``input`` goes to its stdin.
 
     Git's own output is captured rather than let through: it would interleave
     with the tool's logging, and on failure it is what the error message needs.
     """
-    completed = _run(args, cwd)
+    completed = _run(args, cwd, input)
     if completed.stderr:
         log.debug("%s", completed.stderr.rstrip())
     return completed.stdout
@@ -33,7 +33,8 @@ def run_verbatim(args: list[str], cwd: Path | None = None) -> tuple[str, str]:
     return completed.stdout, completed.stderr
 
 
-def _run(args: list[str], cwd: Path | None) -> subprocess.CompletedProcess:
+def _run(args: list[str], cwd: Path | None,
+         input: str | None = None) -> subprocess.CompletedProcess:
     log.debug("git %s (cwd=%s)", " ".join(args), cwd)
     try:
         return subprocess.run(
@@ -41,6 +42,7 @@ def _run(args: list[str], cwd: Path | None) -> subprocess.CompletedProcess:
             cwd=str(cwd) if cwd else None,
             check=True,
             text=True,
+            input=input,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -81,6 +83,38 @@ def clone_partial(url: str, dest: Path) -> None:
 
 def checkout_detached(dest: Path, commit_id: str) -> None:
     run(["checkout", "--quiet", "--detach", commit_id], cwd=dest)
+
+
+def version() -> tuple[int, ...]:
+    """The version of the git in the PATH: ``git version 2.50.1 (Apple Git-155)`` -> (2, 50, 1)."""
+    words = run(["--version"]).split()
+    parts: list[int] = []
+    for piece in (words[2] if len(words) > 2 else "").split("."):
+        if not piece.isdigit():
+            break
+        parts.append(int(piece))
+    return tuple(parts)
+
+
+def sparse_directories(dest: Path) -> list[str] | None:
+    """The directories a partial extraction (cone mode) keeps, sorted.
+
+    ``None`` when the whole tree is extracted. The files of the root, and those
+    directly in the ancestors of these directories, are always extracted too.
+    """
+    try:
+        enabled = run(["config", "--type=bool", "--get", "core.sparseCheckout"], cwd=dest)
+    except GitError:
+        return None
+    if enabled.strip() != "true":
+        return None
+    return sorted(line for line in run(["sparse-checkout", "list"], cwd=dest).splitlines() if line)
+
+
+def sparse_set(dest: Path, directories: list[str]) -> None:
+    """Extract ``directories`` only (cone mode), fetching the blobs they need; none: the root."""
+    run(["sparse-checkout", "set", "--cone", "--stdin"], cwd=dest,
+        input="".join(f"{directory}\n" for directory in directories))
 
 
 def is_full_sha(version: str) -> bool:
