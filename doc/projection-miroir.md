@@ -260,7 +260,7 @@ fil de l'eau.
 | Commande | Effet de la projection |
 | --- | --- |
 | `seed-add`, `seed-clone` | clonent aussi les clés projetées de la graine et des porteurs (P-P3, P-V2) ; clone extrait à la racine seule (P-V7) |
-| `seed-update`, `graft-update` | contrôlent et avancent comme en 0.5.4.0, puis relisent les porteurs (P-P5, P-P7) ; contrôles P-V4 ; regreffe : P-V7 |
+| `seed-update`, `graft-update` | contrôlent et avancent comme en 0.5.4.0, puis relisent les porteurs (P-P5, P-P7) ; contrôles P-V4 ; nouveau clone : P-V7 ; regreffe de `graft-update` : P-V7 |
 | `graft` (complet, `--scion`) | résolution P-R*, casse P-K2, état du clone P-E1, conflits P-G2 ; trunk rétabli en cas d'échec ; `--scion <porteur>` : P-G6 ; ensemble extrait élargi avant la pose, réduit après (P-V7) |
 | `graft-remove [--purge]` | P-G3, P-P6 |
 | `ungraft`, `graft-clean` | inchangés |
