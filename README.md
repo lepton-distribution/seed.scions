@@ -265,6 +265,11 @@ tiers   vendor-hal   !Src/legacy.c
   branche, `*` et `?` sont refusés. Le clone est partiel
   (`--filter=blob:none`) et en `HEAD` détaché ; il doit rester à son commit et
   sans modification de fichier suivi, sinon la greffe est refusée.
+- Depuis 0.6.3.0, un clone distant n'extrait que les répertoires parents des
+  fichiers projetés, plus les fichiers de la racine et des répertoires ancêtres
+  (`git sparse-checkout`, mode cône ; git ≥ 2.35). La greffe recalcule cet
+  ensemble ; un clone extrait en entier est converti par sa prochaine greffe.
+  Un fichier non projeté se lit par `git -C <clone> show HEAD:<chemin>`.
 - Toute ligne mal formée, tout motif sans correspondance, toute collision de
   casse dans le trunk est une erreur (code 1), qui cite fichier et ligne.
 

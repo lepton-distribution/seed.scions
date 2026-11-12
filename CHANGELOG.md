@@ -1,5 +1,27 @@
 # Journal des modifications
 
+## 0.6.3.0
+
+Évolution de la projection. Spécification : `doc/projection-miroir.md`, règle P-V7.
+Formats inchangés ; git ≥ 2.35 est exigé dès qu'une clé projetée a un clone distant.
+
+### Nouveautés
+
+- **Extraction partielle des clones distants** (P-V7). Un clone de clé projetée
+  n'extrait que les répertoires parents des fichiers sources de ses tables (union
+  des clés qui partagent le clone), plus les fichiers placés directement à la
+  racine et dans les répertoires ancêtres (`git sparse-checkout`, mode cône).
+  Créé à la racine seule par `seed-add`, `seed-clone`, `seed-update` ou
+  `graft-update`, il reçoit son ensemble à la greffe : élargi avant la pose des
+  liens, réduit après la greffe réussie, si bien qu'une greffe en échec ne laisse
+  aucun lien vers un fichier non extrait. Un message nomme chaque clone dont
+  l'ensemble change ; `-v` liste les répertoires.
+- Un clone extrait en entier par une version antérieure est converti par sa
+  prochaine greffe ; les objets déjà reçus restent dans `.git`. Un emplacement
+  local n'est jamais touché.
+- git < 2.35 : erreur (code 1) avant tout clonage et toute greffe d'une clé
+  projetée distante.
+
 ## 0.6.2.0
 
 Correctif de la projection. Spécification : `doc/projection-miroir.md`, règle P-G6.
