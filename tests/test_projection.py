@@ -726,7 +726,9 @@ class TestCommands(ProjectionCase):
         self.seed("tiers hal Inc/* scion/inc/\n")
         self.seed_add()
         self.assertTrue((self.clone() / ".git").exists())
-        self.assertTrue((self.clone() / "Inc/a.h").exists())
+        # P-V7 (0.6.3.0): the root only, until the first graft
+        self.assertTrue((self.clone() / "README.md").exists())
+        self.assertFalse((self.clone() / "Inc/a.h").exists())
 
     def test_rootstock_information_compte_projections(self):
         self.ready("tiers hal Inc/* scion/inc/\n")
@@ -861,17 +863,22 @@ class TestExtractionPartielle(ProjectionCase):
         git(clone, "checkout", "-q", "--detach", "v1.0")
         self.seed_add()
         self.assertIn("Src/x.c", self.extracted())
-        err = self.graft()
+        with self.assertLogs("scion.graft", level="INFO") as logs:
+            self.graft()
         self.assertEqual(self.cone(), ["Inc"])
         self.assertNotIn("Src/x.c", self.extracted())
         self.assertEqual(self.broken(), [])
-        self.assertIn(f"{clone} : extraction partielle, 1 répertoire(s)", err)
+        self.assertIn(f"INFO:scion.graft:clone {clone.resolve()} : extraction partielle, 1 répertoire(s)",
+                      logs.output)
 
     def test_message_seulement_si_l_ensemble_change(self):
         self.seed("tiers hal Inc/* scion/inc/\n")
         self.seed_add()
-        self.assertIn("extraction partielle", self.graft())
-        self.assertNotIn("extraction partielle", self.graft())
+        for expected in (True, False):
+            with self.assertLogs("scion.graft", level="INFO") as logs:
+                self.graft()
+            self.assertEqual(any("extraction partielle" in line for line in logs.output),
+                             expected, logs.output)
 
     def test_verbose_liste_les_repertoires(self):
         self.seed("tiers hal Inc/* scion/inc/\ntiers hal Src/deep/* scion/src/\n")

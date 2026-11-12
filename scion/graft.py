@@ -10,6 +10,7 @@ from __future__ import annotations
 import fnmatch
 import logging
 import os
+import posixpath
 import shutil
 from collections import OrderedDict
 from pathlib import Path
@@ -272,11 +273,17 @@ def _mirror_hint(rootstock: Rootstock, entry: GraftedEntry, url: str) -> str:
 
 
 def _fetch(rootstock: Rootstock, wanted, single_branch: bool) -> None:
-    """Clone each missing repository exactly once."""
-    for clone_dir, (url, version, projected, entry) in _remote_clones(wanted).items():
+    """Clone each missing repository exactly once.
+
+    The clone of a projected scion extracts its root only (P-V7) until it is
+    grafted; git must be able to extract partially before any is cloned.
+    """
+    missing = [(clone_dir, data) for clone_dir, data in _remote_clones(wanted).items()
+               if not (Path(clone_dir) / ".git").exists()]
+    if any(projected for _, (_, _, projected, _) in missing):
+        _require_sparse_git()
+    for clone_dir, (url, version, projected, entry) in missing:
         destination = Path(clone_dir)
-        if (destination / ".git").exists():
-            continue
         suggestion = _mirror_hint(rootstock, entry, url)
         try:
             if not projected:
@@ -287,6 +294,7 @@ def _fetch(rootstock: Rootstock, wanted, single_branch: bool) -> None:
             if not suggestion:
                 raise
             raise GitError(f"{exc}{suggestion}", exc.stdout, exc.stderr) from exc
+        gitops.sparse_set(destination, [])
         pinned, fault = _pinned(destination, version)
         if fault:
             raise ScionError(f"{destination} : {fault} (clone laissé en place){suggestion}")
@@ -687,6 +695,95 @@ def _projected_state(root: Path, entry: GraftedEntry) -> str:
     return pinned
 
 
+# --------------------------------------------------------------------------
+# P-V7: partial extraction of the remote clones of projected scions
+# --------------------------------------------------------------------------
+#: ``git sparse-checkout set --cone`` without ``init``
+SPARSE_GIT = (2, 35)
+
+
+def _require_sparse_git() -> None:
+    found = gitops.version()
+    if found < SPARSE_GIT:
+        have = ".".join(str(part) for part in found) or "de version inconnue"
+        need = ".".join(str(part) for part in SPARSE_GIT)
+        raise ScionError(f"git {have} : l'extraction partielle des clones projetés (P-V7) exige "
+                         f"git ≥ {need} ; mettez git à jour")
+
+
+def _outermost(directories) -> list[str]:
+    """The directories, sorted, without those inside another one."""
+    kept: list[str] = []
+    for directory in sorted(set(directories)):
+        if not any(directory.startswith(f"{outer}/") for outer in kept):
+            kept.append(directory)
+    return kept
+
+
+def _extraction(rootstock: Rootstock, entries, projected, tables,
+                chosen: set[str] | None = None) -> dict[Path, list[str]]:
+    """The directories each remote clone of a projected scion extracts (P-V7).
+
+    They are the parents of the sources of the tables of every key sharing the
+    clone (P-V2); a key left out of ``tables`` brings none. ``chosen`` -- by
+    default every key -- keeps the clones of these keys only. A local
+    repository (P-V3) is never extracted partially.
+    """
+    sources: dict[str, list] = {}
+    clones: dict[Path, list[str]] = {}
+    for key in (key for key in entries if key in projected):
+        entry = entries[key]
+        dot = entry.declared_in
+        if dot not in sources:
+            path = rootstock.resolve(dot) / SOURCES_LIST
+            sources[dot] = read_sources(path) if path.is_file() else []
+        try:
+            location = select_source(sources[dot], entry.ref).location
+        except ScionError:
+            continue
+        if is_remote(location):
+            clones.setdefault(rootstock.resolve(entry.local_path).resolve(), []).append(key)
+    plan: dict[Path, list[str]] = {}
+    for clone, keys in clones.items():
+        if chosen is not None and not chosen.intersection(keys):
+            continue
+        files = (source for key in keys if key in tables for source in tables[key].table.values())
+        plan[clone] = _outermost(posixpath.dirname(f) for f in files if posixpath.dirname(f))
+    if plan:
+        _require_sparse_git()
+    return plan
+
+
+def _widen(plan: dict[Path, list[str]]) -> dict[Path, list[str] | None]:
+    """Before linking: each clone extracts at least its new set, and nothing leaves.
+
+    Returns each clone's set as it was (``None``: the whole tree, already wide
+    enough). A graft that fails leaves the sets widened, so that the trunk put
+    back never points to a file that is not extracted.
+    """
+    before: dict[Path, list[str] | None] = {}
+    for clone, directories in plan.items():
+        current = gitops.sparse_directories(clone)
+        before[clone] = current
+        if current is None:
+            continue
+        wider = _outermost([*current, *directories])
+        if wider != current:
+            gitops.sparse_set(clone, wider)
+    return before
+
+
+def _narrow(plan: dict[Path, list[str]], before: dict[Path, list[str] | None]) -> None:
+    """After a successful graft: each clone extracts exactly its set, and says so if it changed."""
+    for clone, directories in plan.items():
+        if gitops.sparse_directories(clone) != directories:
+            gitops.sparse_set(clone, directories)
+        if before.get(clone) != directories:
+            log.info("clone %s : extraction partielle, %d répertoire(s)", clone, len(directories))
+        for directory in directories:
+            log.debug("clone %s : répertoire extrait %s", clone, directory)
+
+
 def _items(rootstock: Rootstock, entry: GraftedEntry, plan: Resolution | None):
     """``([(kind, relative, source)], ignored)`` of one scion, in grafting order."""
     if plan is not None:
@@ -873,9 +970,12 @@ def regraft(rootstock: Rootstock, force: bool = False, prepare=None) -> int:
     try:
         if prepare is not None:
             prepare()
-        plans = _projections(rootstock, read_grafted(rootstock.grafted_list))[1]
+        entries = read_grafted(rootstock.grafted_list)
+        projected, plans = _projections(rootstock, entries)
+        extraction = _extraction(rootstock, entries, projected, plans)
+        before = _widen(extraction)
         ungraft(rootstock, force=force)
-        return graft(rootstock, plans)
+        count = graft(rootstock, plans)
     except BaseException as exc:
         note = _put_back(rootstock, state)
         if isinstance(exc, ScionError):
@@ -883,6 +983,8 @@ def regraft(rootstock: Rootstock, force: bool = False, prepare=None) -> int:
         else:
             log.error("%s", note)
         raise
+    _narrow(extraction, before)
+    return count
 
 
 def _snapshot(rootstock: Rootstock):
@@ -1095,6 +1197,8 @@ def graft_scions(rootstock: Rootstock, keys: list[str], force: bool = False) -> 
     chosen_keys = {entry.ref.key for entry in chosen}
     projected, tables = _projections(rootstock, entries, strict=chosen_keys)
     plans = {key: table for key, table in tables.items() if key in chosen_keys}
+    extraction = _extraction(rootstock, entries, projected, tables, chosen=chosen_keys)
+    before = _widen(extraction)
     removed = _unlink(rootstock, chosen, entries, projected, tables)
     try:
         links = _graft_entries(rootstock, chosen, entries, projected, tables, plans,
@@ -1103,6 +1207,7 @@ def graft_scions(rootstock: Rootstock, keys: list[str], force: bool = False) -> 
         _restore(removed)
         raise
     _prune(rootstock, [path.parent for path, _ in removed], entries.values(), projected, tables)
+    _narrow(extraction, before)
     log.info("greffe partielle : %d feuilles liées dans %s", len(links), rootstock.trunk)
     return len(links)
 
