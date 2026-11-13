@@ -358,6 +358,12 @@ Si la regreffe de `graft` ou de `graft-update` échoue (conflit, git), le trunk
 est rétabli tel qu'il était (liens, répertoires, `.scion.grafted.list`) ; le
 message le signale.
 
+Un clonage en échec (scion, seed distant, clé projetée, dépôt de travail d'un
+miroir) ne laisse aucun répertoire dans `depots/` : ceux que scion a créés pour
+lui sont retirés s'ils sont vides (depuis 0.6.3.1 ; `-v` les nomme). Un
+répertoire qui existait avant l'appel est gardé, de même qu'un clone réussi dont
+la version est introuvable.
+
 ### Faire évoluer un seed
 
 Aucune de ces commandes ne fait de `git pull` ; `seed-scion-*` n'éditent que

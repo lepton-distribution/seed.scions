@@ -1,5 +1,24 @@
 # Journal des modifications
 
+## 0.6.3.1
+
+Correction ; formats de fichiers et commandes inchangés.
+
+### Corrections
+
+- **Un clonage en échec ne laisse aucun répertoire dans `depots/`.** Avant de
+  cloner, scion crée les parents de la destination ; git retire la destination
+  d'un clonage en échec, jamais ses parents. En 0.6.3.0, un `seed-add` dont le
+  clonage échouait laissait ainsi `depots/<shelf>/<prefix>` vide, et un miroir
+  inaccessible toute la chaîne `depots/.mirrors/<hôte>/<chemin>`. Les
+  répertoires que l'appel a créés pour le clone sont désormais retirés, du plus
+  profond au plus haut, s'ils sont vides : scion ordinaire, seed distant
+  (`seed-add`), clé projetée, dépôt de travail d'un miroir (`mirror-sync`,
+  `--dry-run` compris). Un répertoire qui existait avant l'appel, vide ou non,
+  est gardé. Un clone réussi reste en place comme avant : version introuvable
+  (P-V1), checkout en échec, dépôt de travail dont l'amont est inaccessible
+  (M-C6). `-v` nomme les répertoires retirés.
+
 ## 0.6.3.0
 
 Évolution de la projection. Spécification : `doc/projection-miroir.md`, règle P-V7.
