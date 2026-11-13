@@ -268,9 +268,9 @@ def sync_one(rootstock: Rootstock, mirror: Mirror, dry_run: bool = False) -> Rep
     report = Report(mirror.url)
     work = work_dir(rootstock, mirror.url)
     if not (work / "config").is_file():
-        work.parent.mkdir(parents=True, exist_ok=True)
         try:
-            gitops.run(["clone", "--quiet", "--mirror", mirror.url, str(work)])
+            with gitops.clone_parents(work):   # a failed clone leaves no directory behind
+                gitops.run(["clone", "--quiet", "--mirror", mirror.url, str(work)])
         except GitError as exc:
             report.signal(f"miroir inaccessible : {exc}")
             return report
