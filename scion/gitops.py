@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import subprocess
 import tempfile
@@ -58,6 +59,38 @@ def _run(args: list[str], cwd: Path | None,
         ) from exc
 
 
+@contextlib.contextmanager
+def clone_parents(dest: Path):
+    """Create the parents of a clone's ``dest``; undo that if the block fails.
+
+    git removes the destination of a failed clone, never its parents. The
+    directories missing before the call are created, and removed again --
+    deepest first, by ``rmdir`` alone -- when the block raises: an empty
+    directory made for this clone goes, a directory that existed before or that
+    is no longer empty (a clone that succeeded) stays.
+    """
+    missing = []
+    walker = dest.parent
+    while not walker.exists():
+        missing.append(walker)
+        walker = walker.parent
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        yield
+    except BaseException:
+        removed = []
+        for directory in missing:          # deepest first
+            try:
+                directory.rmdir()
+            except OSError:
+                break                      # not empty: its ancestors are not either
+            removed.append(directory)
+        if removed:
+            log.debug("clonage en échec : répertoire(s) créé(s) pour %s retiré(s) : %s",
+                      dest, ", ".join(str(d) for d in removed))
+        raise
+
+
 def clone(url: str, dest: Path, version: str = "master", single_branch: bool = False) -> None:
     """Clone ``url`` into ``dest`` and put it on ``version``.
 
@@ -65,20 +98,25 @@ def clone(url: str, dest: Path, version: str = "master", single_branch: bool = F
     out, which keeps the other branches available locally; with it, only the
     requested branch is fetched. The checkout is never skipped, ``master``
     included: the branch the origin's ``HEAD`` points to need not be the
-    declared version, and a version the origin lacks is an error.
+    declared version, and a version the origin lacks is an error. A failed clone
+    leaves no directory behind (:func:`clone_parents`); a clone whose checkout
+    fails is kept.
     """
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if single_branch:
-        run(["clone", "-b", version, "--single-branch", url, str(dest)])
-        return
-    run(["clone", url, str(dest)])
-    run(["checkout", version], cwd=dest)
+    with clone_parents(dest):
+        if single_branch:
+            run(["clone", "-b", version, "--single-branch", url, str(dest)])
+            return
+        run(["clone", url, str(dest)])
+        run(["checkout", version], cwd=dest)
 
 
 def clone_partial(url: str, dest: Path) -> None:
-    """Clone ``url`` into ``dest`` without blobs nor checkout; the caller checks out."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    run(["clone", "--quiet", "--filter=blob:none", "--no-checkout", url, str(dest)])
+    """Clone ``url`` into ``dest`` without blobs nor checkout; the caller checks out.
+
+    A failed clone leaves no directory behind (:func:`clone_parents`).
+    """
+    with clone_parents(dest):
+        run(["clone", "--quiet", "--filter=blob:none", "--no-checkout", url, str(dest)])
 
 
 def checkout_detached(dest: Path, commit_id: str) -> None:
