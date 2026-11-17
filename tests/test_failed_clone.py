@@ -5,8 +5,8 @@ destination of a failed clone, never its parents. The directories the call
 created for the clone are removed again -- deepest first, empty ones only --
 so that the rootstock is as it was. A directory that existed before the call,
 empty or not, is never touched. A clone that succeeded and is kept on purpose
-(a version the clone lacks, a mirror's work repository whose upstream cannot
-be fetched) stays as it was.
+(a projected key's version the clone lacks, a mirror's work repository whose
+upstream cannot be fetched) stays as it was.
 
 Every repository is local, reached through ``file://localhost``; mirrors are
 only ever synced with ``--dry-run``.
@@ -96,12 +96,12 @@ class TestOrdinaryScion(FailedCloneCase):
         self.failing_seed_add("--single-branch")
         self.assertEqual(tree(self.rootstock), set())
 
-    def test_clone_whose_checkout_fails_is_kept(self):
-        """Unchanged: the clone succeeded; the next pass refuses it (version check)."""
+    def test_version_missing_upstream_leaves_nothing(self):
+        """Without --single-branch too: git refuses the version, no clone is kept (D18)."""
         plain = make_fixture.make_repo(self.base / "repos/plain", {"scion/f.txt": "f\n"})
         self.ordinary("nope", plain)
         self.failing_seed_add()
-        self.assertTrue((self.rootstock / "depots/own/plain/nope/.git").is_dir())
+        self.assertEqual(tree(self.rootstock), set())
 
 
 class TestRemoteSeed(FailedCloneCase):
