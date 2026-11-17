@@ -14,7 +14,7 @@ class TestVersion(unittest.TestCase):
         code, out, _ = run("version")
         self.assertEqual(code, 0)
         self.assertIn(__version__, out)
-        self.assertEqual(__version__, "0.6.3.1")
+        self.assertEqual(__version__, "0.6.3.2")
 
     def test_no_command_prints_help(self):
         code, out, _ = run()

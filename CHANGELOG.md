@@ -1,5 +1,29 @@
 # Journal des modifications
 
+## 0.6.3.2
+
+Correction ; formats de fichiers et commandes inchangés.
+
+### Corrections
+
+- **Un clone est fait à sa version déclarée, ou pas du tout.** Sans
+  `--single-branch`, un scion ordinaire et un seed distant étaient clonés, puis
+  mis sur leur version par `git checkout`. Un checkout en échec (version absente
+  de l'origine, origine vide, branche homonyme d'un répertoire du dépôt)
+  laissait le clone sur la branche de l'origine, sans le dire ; `seed-clone`, et
+  `seed-add` pour un seed distant, le réutilisaient ensuite sans contrôle, et il
+  était greffé. Une version qui n'était qu'un chemin du dépôt (`git checkout
+  scion`) réussissait en silence. git met désormais le clone sur sa version
+  (`git clone -b`), toutes les branches reçues : une version qui n'est ni une
+  branche ni un tag de l'origine est refusée avant tout arbre de travail, et
+  aucun clone n'est gardé. Une branche homonyme d'un répertoire est clonée.
+- Une version commit complet d'un scion ordinaire, hors de la règle (« un nom
+  de branche ou de tag »), est refusée dès le clonage ; elle était acceptée,
+  puis refusée au passage suivant par le contrôle de version de 0.5.4.0.
+- Inchangés : branche (suivie de son amont) et tag (`HEAD` détaché) ;
+  `--single-branch` ; clé projetée (P-V1, clone laissé en place). Un clone
+  laissé hors de sa version par une version antérieure n'est pas touché.
+
 ## 0.6.3.1
 
 Correction ; formats de fichiers et commandes inchangés.

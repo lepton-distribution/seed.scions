@@ -361,8 +361,11 @@ message le signale.
 Un clonage en échec (scion, seed distant, clé projetée, dépôt de travail d'un
 miroir) ne laisse aucun répertoire dans `depots/` : ceux que scion a créés pour
 lui sont retirés s'ils sont vides (depuis 0.6.3.1 ; `-v` les nomme). Un
-répertoire qui existait avant l'appel est gardé, de même qu'un clone réussi dont
-la version est introuvable.
+répertoire qui existait avant l'appel est gardé. Un scion ordinaire ou un seed
+distant est cloné à sa version déclarée (`git clone -b`) : une version qui n'est
+ni une branche ni un tag de l'origine est refusée, et aucun clone n'est gardé
+(depuis 0.6.3.2). Seul le clone d'une clé projetée dont la version est
+introuvable reste en place (P-V1).
 
 ### Faire évoluer un seed
 
