@@ -76,7 +76,7 @@ class TestOrdinaryVersionMissing(CheckoutCase):
         self.assertEqual(tree(self.rootstock), set())
 
     def test_seed_clone_after_a_failure_lists_nothing(self):
-        """The path lepton takes (seed-scion-add, seed-clone, graft --scion)."""
+        """A client adding a scion by seed-scion-add, seed-clone, then graft --scion."""
         self.ordinary("nope", self.plain)
         self.seed_add(expect=2)
         code, _, err = run("seed-clone", "--seed", str(self.seed_dir), cwd=self.rootstock)
