@@ -94,20 +94,19 @@ def clone_parents(dest: Path):
 def clone(url: str, dest: Path, version: str = "master", single_branch: bool = False) -> None:
     """Clone ``url`` into ``dest`` and put it on ``version``.
 
-    Without ``single_branch`` the whole repository is cloned and then checked
-    out, which keeps the other branches available locally; with it, only the
-    requested branch is fetched. The checkout is never skipped, ``master``
+    git puts the clone on ``version`` itself (``git clone -b``), ``master``
     included: the branch the origin's ``HEAD`` points to need not be the
-    declared version, and a version the origin lacks is an error. A failed clone
-    leaves no directory behind (:func:`clone_parents`); a clone whose checkout
-    fails is kept.
+    declared version. A branch is checked out tracking its upstream, a tag on a
+    detached ``HEAD``. Without ``single_branch`` every branch is fetched, which
+    keeps the others available locally; with it, only the requested one. A
+    version the origin lacks as a branch or a tag -- a path of the repository
+    or a commit included -- is refused by git before any work tree is written:
+    no clone is kept, and a failed clone leaves no directory behind
+    (:func:`clone_parents`).
     """
     with clone_parents(dest):
-        if single_branch:
-            run(["clone", "-b", version, "--single-branch", url, str(dest)])
-            return
-        run(["clone", url, str(dest)])
-        run(["checkout", version], cwd=dest)
+        run(["clone", "-b", version, *(["--single-branch"] if single_branch else []),
+             url, str(dest)])
 
 
 def clone_partial(url: str, dest: Path) -> None:

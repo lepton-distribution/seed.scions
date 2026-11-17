@@ -121,7 +121,8 @@ class TestCloneVersion(FixtureCase):
         self.git(alpha, "branch", "-q", "-m", "master", "main")
         code, _, err = run("seed-add", str(self.fx.seed), cwd=self.rootstock)
         self.assertEqual(code, 2, err)
-        self.assertIn("checkout master", err)
+        self.assertIn("git clone -b master", err)
+        self.assertFalse((self.fx.depots / "alpha/core/master").exists())
 
 
 if __name__ == "__main__":
