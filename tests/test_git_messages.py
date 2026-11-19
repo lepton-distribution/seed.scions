@@ -16,10 +16,11 @@ import subprocess
 import unittest
 from unittest import mock
 
+from support import run  # noqa: I001 -- puts the repository on sys.path first
+from test_clone_checkout import CheckoutCase, git
+
 from scion import gitops
 from scion.errors import GitError
-from support import run
-from test_clone_checkout import CheckoutCase, git
 
 ABSENT_CAUSE = "does not appear to be a git repository"
 ADVICE = "and the repository exists."

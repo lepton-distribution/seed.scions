@@ -36,6 +36,13 @@ def run_verbatim(args: list[str], cwd: Path | None = None) -> tuple[str, str]:
 
 def _run(args: list[str], cwd: Path | None,
          input: str | None = None) -> subprocess.CompletedProcess:
+    """Run git; a failure becomes a :class:`GitError` on a single line.
+
+    The message keeps the first non-empty line git wrote on stderr: git states
+    the cause first, and often ends with generic advice ("and the repository
+    exists."). The rule holds in any language of git. The whole of stderr
+    travels with the error and is logged at debug level.
+    """
     log.debug("git %s (cwd=%s)", " ".join(args), cwd)
     try:
         return subprocess.run(
@@ -50,10 +57,12 @@ def _run(args: list[str], cwd: Path | None,
     except FileNotFoundError as exc:
         raise GitError("git est introuvable dans le PATH") from exc
     except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or "").strip().splitlines()
+        if exc.stderr:
+            log.debug("%s", exc.stderr.rstrip())
+        detail = [line.strip() for line in (exc.stderr or "").splitlines() if line.strip()]
         raise GitError(
             f"échec de « git {' '.join(args)} » (code {exc.returncode})"
-            + (f" : {detail[-1]}" if detail else ""),
+            + (f" : {detail[0]}" if detail else ""),
             stdout=exc.stdout or "",
             stderr=exc.stderr or "",
         ) from exc
@@ -102,11 +111,12 @@ def clone(url: str, dest: Path, version: str = "master", single_branch: bool = F
     version the origin lacks as a branch or a tag -- a path of the repository
     or a commit included -- is refused by git before any work tree is written:
     no clone is kept, and a failed clone leaves no directory behind
-    (:func:`clone_parents`).
+    (:func:`clone_parents`). ``--quiet`` keeps git's progress line out of
+    stderr, whose first line is then the cause of a failure (:func:`_run`).
     """
     with clone_parents(dest):
-        run(["clone", "-b", version, *(["--single-branch"] if single_branch else []),
-             url, str(dest)])
+        run(["clone", "-b", version, "--quiet",
+             *(["--single-branch"] if single_branch else []), url, str(dest)])
 
 
 def clone_partial(url: str, dest: Path) -> None:
