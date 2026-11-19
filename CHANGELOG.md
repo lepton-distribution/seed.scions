@@ -1,5 +1,36 @@
 # Journal des modifications
 
+## 0.6.3.3
+
+Correction ; formats de fichiers et commandes inchangés.
+
+### Corrections
+
+- **Un clone existant repris par `seed-clone` est contrôlé.** `seed-clone`
+  réutilisait sans contrôle un clone déjà présent dans `depots/`, et `graft` le
+  greffait ensuite sous la version déclarée, même s'il était sur une autre
+  branche ou un autre commit (par exemple un clone laissé par un checkout en
+  échec de scion ≤ 0.6.3.1). Un clone que `seed-clone` adopte -- scion ordinaire
+  distant qui n'est pas encore greffé avec ce clone et cette version -- doit
+  désormais être à sa version déclarée (branche extraite, commit du tag) ; sinon
+  la commande s'arrête avant tout clonage (code 1), nomme les clones et la
+  commande de remise (`git -C … switch …`), et ne change ni la liste greffée ni
+  les clones. Un clone déjà greffé n'est pas contrôlé : le travail sur une autre
+  branche se regreffe comme avant.
+- **Le clone existant d'un seed distant est contrôlé par `seed-add`.** Il était
+  avancé depuis l'amont de sa branche courante et lu tel quel, même hors de
+  `--version`. Hors de la version demandée, la commande s'arrête (code 1), rien
+  n'est modifié.
+- **Le message d'échec de git donne la cause.** Il gardait la dernière ligne de
+  git, souvent son conseil générique (« and the repository exists. »). Il garde
+  la première ligne non vide, quelle que soit la langue de git, sur une seule
+  ligne ; `-v` journalise toute la sortie. `git clone -b` est lancé avec
+  `--quiet`, pour que sa ligne de progression ne vienne pas en tête.
+- Inchangés : clone à sa version, clone manquant, graine donnée par un chemin ;
+  `graft`, `graft --scion` ; `seed-add`, `seed-update` et `graft-update` (contrôles
+  de 0.5.4.0) ; clé projetée (P-V1, P-E1) ; codes de retour. `seed-update` et
+  `graft-update` ne comparent toujours pas un seed à une version.
+
 ## 0.6.3.2
 
 Correction ; formats de fichiers et commandes inchangés.
