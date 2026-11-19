@@ -367,6 +367,23 @@ ni une branche ni un tag de l'origine est refusée, et aucun clone n'est gardé
 (depuis 0.6.3.2). Seul le clone d'une clé projetée dont la version est
 introuvable reste en place (P-V1).
 
+Un clone existant n'est jamais déplacé par `seed-clone`. Un clone qu'il reprend
+sans que son scion soit déjà greffé avec ce clone et cette version (par exemple
+un clone laissé hors de sa version par une version antérieure) doit être à sa
+version déclarée : branche extraite, ou commit du tag. Sinon la commande
+s'arrête avant tout clonage, nomme ces clones et la commande de remise, et
+laisse la liste greffée et les clones tels quels (depuis 0.6.3.3). Un clone
+déjà greffé n'est contrôlé ni par `seed-clone` ni par `graft` : on peut y
+travailler sur une autre branche, puis regreffer ; `seed-add`, `seed-update` et
+`graft-update` le refusent. `seed-add` contrôle de même le clone existant d'un
+seed distant contre `--version`. `seed-update` et `graft-update` avancent un
+seed sans le comparer à une version. Le clone d'une clé projetée est contrôlé
+par la greffe (P-E1).
+
+L'échec d'une commande git est signalé par la première ligne que git a écrite,
+qui en donne la cause, quelle que soit sa langue ; `-v` montre toute la sortie
+de git (depuis 0.6.3.3).
+
 ### Faire évoluer un seed
 
 Aucune de ces commandes ne fait de `git pull` ; `seed-scion-*` n'éditent que

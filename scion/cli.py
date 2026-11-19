@@ -97,15 +97,22 @@ def _clone_seed(rootstock, seed_url: str, version: str,
                 single_branch: bool) -> tuple[Path, bool]:
     """The seed's local copy, cloned if missing, and whether it may move.
 
-    An existing clone of a remote seed moves like any seed, by fast-forward
-    from its upstream (:func:`scion.graft.update_sources`); a seed given as a
-    path is left as it is.
+    An existing clone of a remote seed must be at the requested version -- the
+    branch checked out, or the commit of the tag (:func:`scion.graft.version_fault`)
+    -- or the command stops before anything has changed; it then moves like
+    any seed, by fast-forward from its upstream
+    (:func:`scion.graft.update_sources`). A seed given as a path is left as it
+    is.
     """
     if not graft_ops.is_remote(seed_url):
         return Path(seed_url).resolve(), False
     name = Path(seed_url.rstrip("/")).stem
     local = rootstock.depots / name / version
     if (local / ".git").exists():
+        fault = graft_ops.version_fault(local.resolve(), version, declared="demandée")
+        if fault:
+            raise ScionError(f"graine existante hors de la version demandée, non reprise "
+                             f"(rien n'a été modifié) : {fault}")
         return local, True
     gitops.clone(seed_url, local, version, single_branch)
     return local, False
