@@ -58,14 +58,22 @@ def sync(rootstock: Rootstock, seed_dot_scion: Path, single_branch: bool = False
     """Resolve one seed into the grafted list, cloning what is missing.
 
     Clones are grouped by destination, so a seed declaring sixteen scions cut
-    out of the same repository clones it once. An existing clone is left as it
-    is: :func:`update_sources` is what moves clones. The scions of the seed
-    come first, then the projected scions of each carrier among them, read
-    once the carriers are cloned.
+    out of the same repository clones it once. An existing clone is never
+    moved: :func:`update_sources` is what moves clones. A clone this call
+    adopts -- one whose ordinary scion is not grafted yet with that clone and
+    that version, such as a clone left by an earlier failure -- must be at its
+    declared version, or the call stops before cloning anything
+    (:func:`_check_adopted`). A clone already grafted is not checked here: it
+    may be on another branch for work, and is regrafted as it is. The scions of
+    the seed come first, then the projected scions of each carrier among them,
+    read once the carriers are cloned; a projected clone is checked by the
+    graft (P-E1).
     """
     dot = Path(seed_dot_scion).resolve()
     entries = read_grafted(rootstock.grafted_list)
+    grafted = dict(entries)
     wanted = _wanted(rootstock, dot, entries)
+    _check_adopted(rootstock, wanted, grafted)
     _fetch(rootstock, wanted, single_branch)
     carried, carried_keys = _carried(rootstock, dot, entries)
     _fetch(rootstock, carried, single_branch)
@@ -272,6 +280,39 @@ def _mirror_hint(rootstock: Rootstock, entry: GraftedEntry, url: str) -> str:
     return mirror.hint(rootstock.resolve(entry.declared_in), url)
 
 
+def _check_adopted(rootstock: Rootstock, wanted, grafted) -> None:
+    """Stop on any existing clone adopted off its declared version.
+
+    A clone is adopted when an ordinary remote scion of ``wanted`` uses it
+    while ``grafted`` -- the grafted list before the call -- does not hold that
+    scion with that clone and that version. Only the version is read
+    (:func:`version_fault`): nothing is fetched. Every clone is checked before
+    the error is raised, so that it names them all; nothing has been changed.
+    """
+    faults: list[str] = []
+    seen: set[str] = set()
+    for entry, url, clone_dir, projected in wanted:
+        if not url or projected or clone_dir in seen:
+            continue
+        previous = grafted.get(entry.ref.key)
+        if (previous is not None and previous.ref.version == entry.ref.version
+                and previous.local_path == entry.local_path):
+            continue
+        seen.add(clone_dir)
+        destination = Path(clone_dir).resolve()
+        if not (destination / ".git").exists():
+            continue
+        fault = version_fault(destination, entry.ref.version,
+                              suggestion=_mirror_hint(rootstock, entry, url))
+        if fault:
+            faults.append(fault)
+    if faults:
+        raise ScionError(
+            f"{len(faults)} clone(s) existant(s) hors de leur version déclarée, non repris "
+            "(liste greffée et clones inchangés) :\n" + "\n".join(f"  {f}" for f in faults)
+        )
+
+
 def _fetch(rootstock: Rootstock, wanted, single_branch: bool) -> None:
     """Clone each missing repository exactly once.
 
@@ -380,17 +421,41 @@ def clone_updates(rootstock: Rootstock, seed_dots, checked: set[str] | None = No
     return behind
 
 
-def _check_clone(clone: Path, version: str, suggestion: str = "") -> tuple[str | None, bool]:
-    """``(fault, behind)`` for one clone and its declared version.
+def version_fault(clone: Path, version: str, declared: str = "déclarée",
+                  suggestion: str = "") -> str | None:
+    """Why ``clone`` is not at ``version``; ``None`` when it is.
 
-    ``suggestion`` completes the message of a version the clone lacks (M-D5).
+    A branch (local, or of a remote) must be checked out; a tag must be the
+    commit of ``HEAD``; any other version is missing from the clone. Only the
+    clone is read: nothing is fetched. ``declared`` qualifies the version in
+    the message; ``suggestion`` completes the message of a missing version
+    (M-D5).
     """
     branch = gitops.current_branch(clone)
     where = f"branche « {branch} »" if branch else f"HEAD détaché sur {gitops.head(clone)}"
     if gitops.is_branch(clone, version):
         if branch != version:
-            return (f"{clone} : {where}, version déclarée « {version} » ; "
-                    f"git -C {clone} switch {version}"), False
+            return (f"{clone} : {where}, version {declared} « {version} » ; "
+                    f"git -C {clone} switch {version}")
+        return None
+    tagged = gitops.tag_commit(clone, version)
+    if tagged is None:
+        return f"{clone} : version {declared} « {version} » introuvable dans le clone{suggestion}"
+    if gitops.commit(clone) != tagged:
+        return (f"{clone} : {where}, version {declared} : tag « {version} » ; "
+                f"git -C {clone} switch --detach {version}")
+    return None
+
+
+def _check_clone(clone: Path, version: str, suggestion: str = "") -> tuple[str | None, bool]:
+    """``(fault, behind)`` for one clone and its declared version.
+
+    ``suggestion`` completes the message of a version the clone lacks (M-D5).
+    """
+    fault = version_fault(clone, version, suggestion=suggestion)
+    if fault:
+        return fault, False
+    if gitops.is_branch(clone, version):
         upstream = gitops.upstream(clone)
         if upstream is None:
             return f"{clone} : branche « {version} » sans amont", False
@@ -406,12 +471,6 @@ def _check_clone(clone: Path, version: str, suggestion: str = "") -> tuple[str |
             log.info("clone %s : %d commit(s) non publié(s), laissé tel quel", clone, ahead)
         return None, bool(late)
     tagged = gitops.tag_commit(clone, version)
-    if tagged is None:
-        return (f"{clone} : version déclarée « {version} » introuvable dans le clone"
-                f"{suggestion}"), False
-    if gitops.commit(clone) != tagged:
-        return (f"{clone} : {where}, version déclarée : tag « {version} » ; "
-                f"git -C {clone} switch --detach {version}"), False
     published = gitops.remote_tag_commit(clone, version)
     if published is None:
         log.info("clone %s : tag « %s » absent de l'amont, laissé tel quel", clone, version)
