@@ -2,9 +2,11 @@
 
 git ends many failures with generic advice ("Please make sure you have the
 correct access rights / and the repository exists."): the cause comes first.
-The message of a failed command keeps the first non-empty line of git's
-stderr, whatever git's language, on a single line; ``git clone`` runs with
-``--quiet`` so that its progress line does not come first. The whole of git's
+The message of a failed command keeps, on a single line, the first line of
+git's stderr that states a cause -- ``fatal:`` or ``error:``, in English or in
+French --, skipping the warnings and hints git may write before it; without
+such a line, the first non-empty line, whatever git's language. ``git clone``
+runs with ``--quiet`` so that its progress line does not come first. The whole of git's
 stderr is logged at debug level (``-v``).
 
 Every repository is local, reached through ``file://localhost``.
@@ -99,6 +101,51 @@ class TestFirstLine(unittest.TestCase):
                            "et que le dépôt existe.\n")
         self.assertEqual(str(exc), "échec de « git fetch --quiet » (code 128) : "
                                    f"fatal{nbsp}: '/x' does not appear to be a git repository")
+
+    def test_warning_before_the_cause_is_skipped(self):
+        """git < 2.50 warns first on ``git clone -b <absent> --single-branch``."""
+        exc = self.failing("warning: Could not find remote branch nope to clone.\n"
+                           "fatal: Remote branch nope not found in upstream origin\n"
+                           "fatal: The remote end hung up unexpectedly\n")
+        self.assertTrue(str(exc).endswith(
+            " : fatal: Remote branch nope not found in upstream origin"), str(exc))
+
+    def test_translated_warning_before_the_cause_is_skipped(self):
+        nbsp = " "
+        exc = self.failing(f"avertissement{nbsp}: Impossible de trouver la branche distante "
+                           "'nope' à cloner.\n"
+                           f"fatal{nbsp}: La branche distante nope n'a pas été trouvée dans le "
+                           "dépôt amont origin\n")
+        self.assertTrue(str(exc).endswith(
+            f" : fatal{nbsp}: La branche distante nope n'a pas été trouvée dans le dépôt "
+            "amont origin"), str(exc))
+
+    def test_hints_before_the_cause_are_skipped(self):
+        """``git merge --ff-only`` on a diverged branch gives its advice first."""
+        exc = self.failing("hint: Diverging branches can't be fast-forwarded, you need to "
+                           "either:\nhint:\nhint: \tgit merge --no-ff\nhint:\n"
+                           "fatal: Not possible to fast-forward, aborting.\n")
+        self.assertTrue(str(exc).endswith(" : fatal: Not possible to fast-forward, aborting."),
+                        str(exc))
+
+    def test_an_error_line_is_a_cause(self):
+        nbsp = " "
+        self.assertTrue(str(self.failing("hint: x\nerror: y\nhint: z\n")).endswith(" : error: y"))
+        self.assertTrue(str(self.failing(f"astuce{nbsp}: x\nerreur{nbsp}: y\n")).endswith(
+            f" : erreur{nbsp}: y"))
+
+    def test_first_cause_wins(self):
+        exc = self.failing("error: failed to push some refs\nfatal: later\n")
+        self.assertTrue(str(exc).endswith(" : error: failed to push some refs"), str(exc))
+
+    def test_without_a_cause_line_the_first_line_is_kept(self):
+        """Another language, or no prefix at all: the rule of 0.6.3.3."""
+        exc = self.failing("Warnung: etwas\nSchwerwiegend: Ursache\n")
+        self.assertTrue(str(exc).endswith(" : Warnung: etwas"), str(exc))
+
+    def test_cause_is_a_single_line(self):
+        exc = self.failing("warning: w\nfatal: cause\nfatal: suite\n")
+        self.assertEqual(len(str(exc).splitlines()), 1, str(exc))
 
     def test_leading_blank_lines_are_skipped(self):
         exc = self.failing("\n  \nfatal: cause\nsuite\n")

@@ -12,6 +12,11 @@ from .errors import GitError
 
 log = logging.getLogger(__name__)
 
+# git's prefixes of a line that states the cause of a failure, in English and in
+# French (po/fr.po of git: a no-break space before the colon). A warning or a
+# hint git writes before the cause is skipped.
+CAUSE_PREFIXES = ("fatal: ", "error: ", "fatal\u00a0: ", "erreur\u00a0: ")
+
 
 def run(args: list[str], cwd: Path | None = None, input: str | None = None) -> str:
     """Run one git command and return its stdout; ``input`` goes to its stdin.
@@ -38,10 +43,9 @@ def _run(args: list[str], cwd: Path | None,
          input: str | None = None) -> subprocess.CompletedProcess:
     """Run git; a failure becomes a :class:`GitError` on a single line.
 
-    The message keeps the first non-empty line git wrote on stderr: git states
-    the cause first, and often ends with generic advice ("and the repository
-    exists."). The rule holds in any language of git. The whole of stderr
-    travels with the error and is logged at debug level.
+    The message keeps the cause git wrote on stderr (:func:`cause`), not the
+    generic advice it often ends with ("and the repository exists."). The
+    whole of stderr travels with the error and is logged at debug level.
     """
     log.debug("git %s (cwd=%s)", " ".join(args), cwd)
     try:
@@ -59,13 +63,28 @@ def _run(args: list[str], cwd: Path | None,
     except subprocess.CalledProcessError as exc:
         if exc.stderr:
             log.debug("%s", exc.stderr.rstrip())
-        detail = [line.strip() for line in (exc.stderr or "").splitlines() if line.strip()]
+        detail = cause(exc.stderr or "")
         raise GitError(
             f"échec de « git {' '.join(args)} » (code {exc.returncode})"
-            + (f" : {detail[0]}" if detail else ""),
+            + (f" : {detail}" if detail else ""),
             stdout=exc.stdout or "",
             stderr=exc.stderr or "",
         ) from exc
+
+
+def cause(stderr: str) -> str:
+    """The line of git's ``stderr`` that states why it failed; ``""`` if none.
+
+    The first line that starts with ``fatal:`` or ``error:``, in English or in
+    French (:data:`CAUSE_PREFIXES`): git may warn or give hints before it
+    (``warning: Could not find remote branch …`` from ``git clone
+    --single-branch`` before git 2.50, ``hint:`` lines from ``git merge
+    --ff-only``). Without such a line -- git in another language, or a message
+    without prefix -- the first non-empty line.
+    """
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    return next((line for line in lines if line.startswith(CAUSE_PREFIXES)),
+                lines[0] if lines else "")
 
 
 @contextlib.contextmanager
@@ -112,7 +131,7 @@ def clone(url: str, dest: Path, version: str = "master", single_branch: bool = F
     or a commit included -- is refused by git before any work tree is written:
     no clone is kept, and a failed clone leaves no directory behind
     (:func:`clone_parents`). ``--quiet`` keeps git's progress line out of
-    stderr, whose first line is then the cause of a failure (:func:`_run`).
+    stderr, where the cause of a failure is then read (:func:`cause`).
     """
     with clone_parents(dest):
         run(["clone", "-b", version, "--quiet",
@@ -266,6 +285,14 @@ def upstream(dest: Path) -> str | None:
     try:
         return run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
                    cwd=dest).strip() or None
+    except GitError:
+        return None
+
+
+def origin_url(dest: Path) -> str | None:
+    """The URL of ``dest``'s remote ``origin``; ``None`` without one."""
+    try:
+        return run(["config", "--get", "remote.origin.url"], cwd=dest).strip() or None
     except GitError:
         return None
 

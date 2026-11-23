@@ -376,13 +376,21 @@ laisse la liste greffée et les clones tels quels (depuis 0.6.3.3). Un clone
 déjà greffé n'est contrôlé ni par `seed-clone` ni par `graft` : on peut y
 travailler sur une autre branche, puis regreffer ; `seed-add`, `seed-update` et
 `graft-update` le refusent. `seed-add` contrôle de même le clone existant d'un
-seed distant contre `--version`. `seed-update` et `graft-update` avancent un
-seed sans le comparer à une version. Le clone d'une clé projetée est contrôlé
-par la greffe (P-E1).
+seed distant contre `--version`. Le clone d'une clé projetée est contrôlé par la
+greffe (P-E1).
 
-L'échec d'une commande git est signalé par la première ligne que git a écrite,
-qui en donne la cause, quelle que soit sa langue ; `-v` montre toute la sortie
-de git (depuis 0.6.3.3).
+Un seed distant cloné par `seed-add` (dépôt `depots/<nom>/<version>`, `<nom>`
+tiré de son URL `origin`) doit aussi être à cette version pour `seed-update` et
+`graft-update` : branche extraite, ou commit du tag. Sinon la commande s'arrête
+avant toute modification et donne la commande de remise. Un seed cloné à un tag
+est vérifié, jamais avancé. Un seed donné par un chemin, ou sans `origin`, n'a
+pas de version et avance comme avant (depuis 0.6.3.4).
+
+L'échec d'une commande git est signalé par la ligne de git qui en donne la
+cause : la première qui commence par `fatal:` ou `error:`, en anglais ou en
+français ; les avertissements et astuces écrits avant elle sont sautés (depuis
+0.6.3.4). Sans une telle ligne (git dans une autre langue), c'est la première
+ligne non vide. `-v` montre toute la sortie de git (depuis 0.6.3.3).
 
 ### Faire évoluer un seed
 
