@@ -1,5 +1,30 @@
 # Journal des modifications
 
+## 0.6.3.4
+
+Correction ; formats de fichiers et commandes inchangés.
+
+### Corrections
+
+- **Un seed cloné hors de sa version arrête `seed-update` et `graft-update`.**
+  Ils avançaient le dépôt d'un seed distant cloné par `seed-add --version V`
+  (`depots/<nom>/V`) sur sa branche courante, sans le comparer à `V` : un seed
+  remis à la main sur une autre branche était avancé, puis lu, et ses scions
+  clonés et greffés sous cette autre branche. Un seed détaché était lu tel quel.
+  Le seed doit désormais être à `V` (branche extraite, commit du tag) ; sinon la
+  commande s'arrête (code 1) avant toute modification, nomme le seed et la
+  commande de remise. Un seed cloné à un tag est vérifié, jamais avancé. Le seed
+  est reconnu à sa place : dépôt `depots/<nom tiré de son URL origin>/V`.
+- **Le message d'échec de git donne la cause après un avertissement.** Il
+  gardait la première ligne non vide de git, qui peut être un avertissement
+  (`warning: Could not find remote branch … to clone.` de `git clone
+  --single-branch` avant git 2.50) ou une astuce (`hint:` de `git merge
+  --ff-only`). Il garde la première ligne `fatal:` ou `error:`, en anglais ou en
+  français (`fatal` ou `erreur`, une espace insécable, puis le deux-points), sinon,
+  comme avant, la première ligne non vide ; toujours sur une seule ligne.
+- Inchangés : seed donné par un chemin, seed sans `origin`, seed à sa version ;
+  contrôles des clones ; codes de retour.
+
 ## 0.6.3.3
 
 Correction ; formats de fichiers et commandes inchangés.
