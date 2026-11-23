@@ -512,14 +512,43 @@ def advance_clones(clones: list[Path]) -> None:
         log.info("clone %s avancé : %s -> %s", clone, before, gitops.head(clone))
 
 
+def seed_clone_name(url: str) -> str:
+    """The directory of a remote seed's clones: ``depots/<this>/<version>`` (``seed-add``)."""
+    return Path(url.rstrip("/")).stem
+
+
+def cloned_seed_version(rootstock: Rootstock, top: Path) -> str | None:
+    """The version ``seed-add`` cloned the seed repository ``top`` at; ``None`` if none.
+
+    ``seed-add URL --version V`` clones a remote seed in
+    ``depots/<seed_clone_name(URL)>/V``, and git keeps ``URL`` as the clone's
+    origin: the version is read from the place of the repository, ``V`` being
+    the rest of its path (a branch may hold a slash). A seed given as a path --
+    outside ``depots/``, without an origin, or in a directory not named after
+    its origin -- has no version.
+    """
+    try:
+        rel = top.relative_to(rootstock.depots.resolve())
+    except ValueError:
+        return None
+    url = gitops.origin_url(top)
+    if url is None or len(rel.parts) < 2 or rel.parts[0] != seed_clone_name(url):
+        return None
+    return "/".join(rel.parts[1:])
+
+
 def seed_updates(rootstock: Rootstock, seed_dots) -> list[Path]:
     """The seed repositories to fast-forward; stop on any that cannot be.
 
-    A seed moves with its upstream, by fast-forward only. One with changes to
-    tracked files, or one that diverged, is an error; nothing has been changed
-    yet when it is raised. A seed outside git, without an upstream, or in the
-    repository that holds the rootstock itself is left as it is, and so is one
-    that is only ahead of its upstream.
+    A seed moves with its upstream, by fast-forward only. A seed cloned by
+    ``seed-add`` (:func:`cloned_seed_version`) must first be at the version it
+    was cloned at -- the branch checked out, or the commit of the tag
+    (:func:`version_fault`); one cloned at a tag is checked, never moved. One
+    off that version, one with changes to tracked
+    files, or one that diverged, is an error; nothing has been changed yet when
+    it is raised. A seed outside git, without an upstream, or in the repository
+    that holds the rootstock itself is left as it is, and so is one that is
+    only ahead of its upstream.
     """
     behind: list[Path] = []
     seen: set[Path] = set()
@@ -535,6 +564,15 @@ def seed_updates(rootstock: Rootstock, seed_dots) -> list[Path]:
         if _inside(rootstock.path.resolve(), top):
             log.debug("graine %s : dans le dépôt du rootstock, laissée telle quelle", top)
             continue
+        version = cloned_seed_version(rootstock, top)
+        if version is not None:
+            fault = version_fault(top, version, declared="demandée")
+            if fault:
+                raise ScionError(f"graine hors de la version demandée, non mise à jour "
+                                 f"(rien n'a été modifié) : {fault}")
+            if not gitops.is_branch(top, version):
+                log.debug("graine %s : tag « %s », laissée telle quelle", top, version)
+                continue
         upstream = gitops.upstream(top)
         if upstream is None:
             log.debug("graine %s : sans amont, laissée telle quelle", top)

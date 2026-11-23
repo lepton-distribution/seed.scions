@@ -106,8 +106,7 @@ def _clone_seed(rootstock, seed_url: str, version: str,
     """
     if not graft_ops.is_remote(seed_url):
         return Path(seed_url).resolve(), False
-    name = Path(seed_url.rstrip("/")).stem
-    local = rootstock.depots / name / version
+    local = rootstock.depots / graft_ops.seed_clone_name(seed_url) / version
     if (local / ".git").exists():
         fault = graft_ops.version_fault(local.resolve(), version, declared="demandée")
         if fault:

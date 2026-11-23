@@ -80,7 +80,7 @@ class TestSeedOffItsVersion(RemoteSeedCase):
         self.advance("master")
         head, grafted, links = self.head(seed), self.grafted(), self.links()
         err = self.seed_update(seed, expect=1)
-        self.assertIn(f"graine {seed.resolve()}", err)
+        self.assertIn("graine hors de la version demandée", err)
         self.assertIn("branche « master », version demandée « dev »", err)
         self.assertIn(f"git -C {seed.resolve()} switch dev", err)
         self.assertIn("rien n'a été modifié", err)
@@ -108,12 +108,22 @@ class TestSeedOffItsVersion(RemoteSeedCase):
 
     def test_tag_seed_moved_to_a_branch_is_refused(self):
         seed = self.remote_seed_add("t1")
-        git(seed, "checkout", "-q", "dev")
         self.advance("dev")
+        git(seed, "fetch", "-q")
+        git(seed, "checkout", "-q", "dev")
         head = self.head(seed)
         err = self.seed_update(seed, expect=1)
         self.assertIn("tag « t1 »", err)
         self.assertIn(f"git -C {seed.resolve()} switch --detach t1", err)
+        self.assertEqual(self.head(seed), head)
+
+    def test_tag_seed_on_a_branch_at_the_tag_is_not_moved(self):
+        """A tag is checked, never pulled: on a branch still at the tag, it stays there."""
+        seed = self.remote_seed_add("t1")
+        git(seed, "checkout", "-q", "dev")
+        head = self.head(seed)
+        self.advance("dev")
+        self.seed_update(seed)
         self.assertEqual(self.head(seed), head)
 
     def test_version_with_a_slash_is_read_from_the_whole_path(self):

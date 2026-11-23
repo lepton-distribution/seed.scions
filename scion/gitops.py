@@ -289,6 +289,14 @@ def upstream(dest: Path) -> str | None:
         return None
 
 
+def origin_url(dest: Path) -> str | None:
+    """The URL of ``dest``'s remote ``origin``; ``None`` without one."""
+    try:
+        return run(["config", "--get", "remote.origin.url"], cwd=dest).strip() or None
+    except GitError:
+        return None
+
+
 def fetch(dest: Path) -> None:
     run(["fetch", "--quiet"], cwd=dest)
 
